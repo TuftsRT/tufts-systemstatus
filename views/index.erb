@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cluster Monitor Dashboard</title>
+    <% begin; asset_v = File.mtime(File.expand_path('../public/script.js', __dir__)).to_i; css_v = File.mtime(File.expand_path('../public/styles.css', __dir__)).to_i; rescue; asset_v = css_v = Time.now.to_i; end %>
+    <link rel="stylesheet" href="<%= request.script_name %>/styles.css?v=<%= css_v %>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <script>
+        // Base path for the app when mounted under a sub-URL in OOD
+        window.APP_BASE_PATH = "<%= request.script_name %>";
+    </script>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fas fa-server"></i> Cluster Monitor</h1>
+            <div class="header-controls">
+                <div class="last-update">
+                    Last updated: <span id="last-update-time">Never</span>
+                </div>
+                <button id="refresh-btn" class="btn btn-primary">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <label class="switch">
+                    <input type="checkbox" id="auto-refresh-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+                <span class="auto-refresh-label">Auto-refresh (30s)</span>
+            </div>
+        </header>
+
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="spinner"></div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error-message" class="error-message hidden">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span id="error-text"></span>
+        </div>
+
+        <!-- Cluster Stats Overview -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #3498db;">
+                    <i class="fas fa-server"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-label">Total Nodes</div>
+                    <div class="stat-value" id="stat-total-nodes">-</div>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #2ecc71;">
+                    <i class="fas fa-microchip"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-label">Available CPUs</div>
+                    <div class="stat-value" id="stat-available-cpus">-</div>
+                    <div class="stat-subtext" id="stat-total-cpus">of - total</div>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #9b59b6;">
+                    <i class="fas fa-memory"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-label">Available Memory</div>
+                    <div class="stat-value" id="stat-available-memory">-</div>
+                    <div class="stat-subtext" id="stat-total-memory">of - total</div>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #e74c3c;">
+                    <i class="fas fa-tasks"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-label">Running Jobs</div>
+                    <div class="stat-value" id="stat-running-jobs">-</div>
+                    <div class="stat-subtext" id="stat-total-jobs">- total jobs</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- GPU Overview Section -->
+        <section class="section">
+            <h2><i class="fas fa-th"></i> GPU Overview</h2>
+            <div id="gpu-cards" class="gpu-grid">
+                <!-- GPU cards will be inserted here -->
+            </div>
+        </section>
+
+        <!-- Partitions Section -->
+        <section class="section">
+            <h2><i class="fas fa-layer-group"></i> Partitions</h2>
+            <div id="partition-cards" class="partition-grid">
+                <!-- Partition cards will be inserted here -->
+            </div>
+        </section>
+
+        <!-- Nodes Table -->
+        <section class="section">
+            <h2><i class="fas fa-list"></i> Node Details</h2>
+            <div class="table-controls">
+                <input type="text" id="node-search" class="search-input" placeholder="Search nodes...">
+                <select id="node-filter" class="filter-select">
+                    <option value="all">All Nodes</option>
+                    <option value="idle">Idle Only</option>
+                    <option value="gpu">GPU Nodes Only</option>
+                    <option value="available">Available Only</option>
+                    <option value="down">Down/Draining</option>
+                </select>
+            </div>
+            <div class="table-wrapper table-vertical-scroll">
+                <table class="nodes-table">
+                    <thead>
+                        <tr>
+                            <th data-sort="name">Node Name <i class="fas fa-sort"></i></th>
+                            <th data-sort="status">Status <i class="fas fa-sort"></i></th>
+                            <th data-sort="cpus_free">CPUs (Free/Total) <i class="fas fa-sort"></i></th>
+                            <th data-sort="memory_free">Memory (Free/Total) <i class="fas fa-sort"></i></th>
+                            <th data-sort="gpu_type">GPU Type <i class="fas fa-sort"></i></th>
+                            <th data-sort="gpu_count">GPU Count <i class="fas fa-sort"></i></th>
+                            <th>Partitions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="nodes-table-body">
+                        <!-- Node rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- My Jobs Section -->
+        <section class="section">
+            <h2><i class="fas fa-clock"></i> My Jobs</h2>
+            <div class="table-controls">
+                <input type="text" id="job-search" class="search-input" placeholder="Search jobs...">
+                <select id="job-filter" class="filter-select">
+                    <option value="all">All Jobs</option>
+                    <option value="R">Running Only</option>
+                    <option value="PD">Pending Only</option>
+                </select>
+            </div>
+            <div class="table-wrapper table-vertical-scroll">
+                <table class="jobs-table">
+                    <thead>
+                        <tr>
+                            <th data-sort-job="job_id">Job ID <i class="fas fa-sort"></i></th>
+                            <th data-sort-job="name">Name <i class="fas fa-sort"></i></th>
+                            <th data-sort-job="user">User <i class="fas fa-sort"></i></th>
+                            <th data-sort-job="state">State <i class="fas fa-sort"></i></th>
+                            <th data-sort-job="time">Time <i class="fas fa-sort"></i></th>
+                            <th data-sort-job="nodes">Nodes <i class="fas fa-sort"></i></th>
+                            <th data-sort-job="cpus">CPUs <i class="fas fa-sort"></i></th>
+                            <th data-sort-job="gpus">GPUs <i class="fas fa-sort"></i></th>
+                            <th data-sort-job="partition">Partition <i class="fas fa-sort"></i></th>
+                            <th data-sort-job="node_list">Node <i class="fas fa-sort"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-table-body">
+                        <!-- Job rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script src="<%= request.script_name %>/script.js?v=<%= asset_v %>"></script>
+</body>
+</html>
+

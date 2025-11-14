@@ -1,0 +1,7 @@
+---
+name: Cluster Monitor
+description: Real-time cluster status dashboard showing GPU availability, partitions, and node information
+icon: fa://server
+category: Monitoring
+subcategory: System
+
