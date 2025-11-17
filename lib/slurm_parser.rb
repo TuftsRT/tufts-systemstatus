@@ -92,6 +92,46 @@ module SlurmParser
     partitions
   end
 
+  # Parse squeue output for ALL jobs (all users)
+  # Used for overall cluster statistics
+  def self.parse_all_jobs
+    output = run_command('squeue -o "%i %j %u %t %M %D %C %b %P %N"')
+    jobs = []
+    
+    output.each_line.drop(1).each do |line| # Skip header
+      parts = line.strip.split(/\s+/, 10)
+      next if parts.length < 9
+      
+      # Parse GPU allocation from TRES format (e.g., "gres/gpu:a100:1" or "gres/gpu:2" or "N/A")
+      gpu_tres = parts[7] || ''
+      gpus = 0
+      if gpu_tres =~ /gpu:(\w+):(\d+)/
+        # Format: gres/gpu:TYPE:COUNT (e.g., gres/gpu:a100:1)
+        gpus = $2.to_i
+      elsif gpu_tres =~ /gpu:(\d+)/
+        # Format: gres/gpu:COUNT (e.g., gres/gpu:2)
+        gpus = $1.to_i
+      end
+      
+      job = {
+        job_id: parts[0],
+        name: parts[1],
+        user: parts[2],
+        state: parts[3],
+        time: parts[4],
+        nodes: parts[5].to_i,
+        cpus: parts[6].to_i,
+        gpus: gpus,
+        partition: parts[8],
+        node_list: parts[9] || ''
+      }
+      
+      jobs << job
+    end
+    
+    jobs
+  end
+
   # Parse squeue output for job information
   # Shows all jobs (running and pending) for the current user.
   # The UI has filters to show only running or pending jobs.
@@ -218,23 +258,24 @@ module SlurmParser
   def self.get_dashboard_data
     nodes = parse_nodes
     partitions = parse_partitions
-    jobs = parse_queue
+    all_jobs = parse_all_jobs  # Get all jobs for stats (all users)
+    my_jobs = parse_queue      # Get current user's jobs for "My Jobs" table
     
     {
       timestamp: Time.now.to_i,
       nodes: nodes,
       partitions: partition_summary(partitions, nodes),
       gpu_summary: gpu_summary(nodes),
-      jobs: jobs,
+      jobs: my_jobs,  # "My Jobs" table shows only current user's jobs
       stats: {
         total_nodes: nodes.count,
         total_cpus: nodes.sum { |n| n[:cpus_total] },
         available_cpus: nodes.sum { |n| n[:cpus_free] },
         total_memory_mb: nodes.sum { |n| n[:memory_total] },
         available_memory_mb: nodes.sum { |n| n[:memory_free] },
-        total_jobs: jobs.count,
-        running_jobs: jobs.count { |j| j[:state] == 'R' },
-        pending_jobs: jobs.count { |j| j[:state] == 'PD' }
+        total_jobs: all_jobs.count,            # Count all jobs across all users
+        running_jobs: all_jobs.count { |j| j[:state] == 'R' },  # Count running jobs from all users
+        pending_jobs: all_jobs.count { |j| j[:state] == 'PD' }  # Count pending jobs from all users
       }
     }
   end
