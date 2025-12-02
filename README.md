@@ -1,6 +1,6 @@
 # System Status for Tufts Open OnDemand
 
-A real-time web dashboard for monitoring SLURM cluster status, including GPU availability, partition information, node details, and job queue.
+A real-time web dashboard for monitoring SLURM cluster status, including GPU availability, partition information, and node details.
 
 ## Features
 
@@ -8,8 +8,7 @@ A real-time web dashboard for monitoring SLURM cluster status, including GPU ava
 - **GPU Overview**: Visual cards showing GPU types, availability, and usage
 - **Partition Summary**: Status of all partitions with node counts and limits
 - **Node Details**: Sortable and filterable table of all cluster nodes
-- **Job Queue**: Current jobs running and pending in the cluster
-- **Cluster Statistics**: Quick overview of total resources and availability
+- **Cluster Statistics**: Quick overview of total resources, availability, and system-wide job counts
 - **Responsive Design**: Works on desktop and mobile devices
 
 ## Installation
@@ -70,7 +69,6 @@ The dashboard provides several API endpoints:
 - `GET /api/nodes` - Node information only
 - `GET /api/gpu` - GPU summary only
 - `GET /api/partitions` - Partition information only
-- `GET /api/queue` - Job queue only
 - `GET /health` - Health check endpoint
 
 ## Features in Detail
@@ -97,12 +95,12 @@ The dashboard provides several API endpoints:
 - Search functionality for quick node lookup
 - Shows CPU, memory, GPU, and partition information
 
-### Job Queue
+### Cluster Statistics
 
-- Current jobs in the system
-- Job state, runtime, and resource usage
-- User and partition information
-- Reason for pending jobs
+- System-wide job counts (total jobs, running jobs, pending jobs across all users)
+- Total and available CPUs across the cluster
+- Total and available memory
+- Node availability overview
 
 ## Customization
 
@@ -140,7 +138,7 @@ Append `?debug=1` to the app URL to print concise, copyable logs to the browser 
 https://<ood-host>/pun/dev/cluster-dashboard?debug=1
 ```
 
-Shows fetched stats, partitions, GPU summary, first few nodes, and job counts.
+Shows fetched stats, partitions, GPU summary, and node details.
 
 ## How It Works (at a glance)
 
@@ -149,10 +147,10 @@ Shows fetched stats, partitions, GPU summary, first few nodes, and job counts.
 3. Backend (`lib/slurm_parser.rb`) executes live SLURM commands:
    - `scontrol show node --oneliner` (nodes, CPUs, memory, GPUs, partitions, state)
    - `sinfo -o "%P %a %l %D %t"` (partition availability, time limits, counts)
-   - `squeue -o "%i %j %u %t %M %D %C %P %R"` (job list)
+   - `squeue -o "%i %j %u %t %M %D %C %b %P %N"` (system-wide job statistics for all users)
 4. Backend parses output and returns JSON; frontend renders cards/tables.
 
-GPU “in‑use” is estimated for mixed/allocated nodes using CPU usage ratio; for exact GPU accounting you can extend parsing to include per-job GRES usage.
+GPU "in‑use" is estimated for mixed/allocated nodes using CPU usage ratio; for exact GPU accounting you can extend parsing to include per-job GRES usage.
 
 ## Troubleshooting
 
