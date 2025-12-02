@@ -5,13 +5,9 @@ class ClusterDashboard {
         this.autoRefreshInterval = null;
         this.refreshIntervalMs = 30000; // 30 seconds
         this.currentSort = { field: null, ascending: true };
-        this.currentJobSort = { field: null, ascending: true };
         this.currentFilter = 'all';
         this.currentSearch = '';
         this.allNodes = [];
-        this.allJobs = [];
-        this.currentJobFilter = 'all';
-        this.currentJobSearch = '';
         // Debug mode: enable by visiting the page with ?debug=1
         const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
         this.debugEnabled = (params && params.get('debug') === '1') || (typeof window !== 'undefined' && window.DASHBOARD_DEBUG === true);
@@ -31,17 +27,10 @@ class ClusterDashboard {
         document.getElementById('auto-refresh-toggle').addEventListener('change', (e) => this.toggleAutoRefresh(e.target.checked));
         document.getElementById('node-search').addEventListener('input', (e) => this.handleSearch(e.target.value));
         document.getElementById('node-filter').addEventListener('change', (e) => this.handleFilter(e.target.value));
-        document.getElementById('job-search').addEventListener('input', (e) => this.handleJobSearch(e.target.value));
-        document.getElementById('job-filter').addEventListener('change', (e) => this.handleJobFilter(e.target.value));
         
         // Set up table sorting for nodes
         document.querySelectorAll('thead th[data-sort]').forEach(th => {
             th.addEventListener('click', () => this.handleSort(th.dataset.sort));
-        });
-
-        // Set up table sorting for jobs
-        document.querySelectorAll('thead th[data-sort-job]').forEach(th => {
-            th.addEventListener('click', () => this.handleJobSort(th.dataset.sortJob));
         });
 
         // Initial data load
@@ -80,8 +69,7 @@ class ClusterDashboard {
                 stats: result.data?.stats,
                 gpuTypes: Object.keys(result.data?.gpu_summary || {}),
                 partitions: Object.keys(result.data?.partitions || {}),
-                nodes: (result.data?.nodes || []).length,
-                jobs: (result.data?.jobs || []).length
+                nodes: (result.data?.nodes || []).length
             });
 
             this.renderDashboard(result.data);
@@ -100,8 +88,7 @@ class ClusterDashboard {
         this.debug('Rendering dashboard...', {
             totalNodes: this.allNodes.length,
             gpuSummary: data.gpu_summary,
-            partitionsKeys: Object.keys(data.partitions || {}),
-            jobsCount: (data.jobs || []).length
+            partitionsKeys: Object.keys(data.partitions || {})
         });
 
         // Update stats
@@ -115,9 +102,6 @@ class ClusterDashboard {
         
         // Update nodes table
         this.updateNodesTable(this.allNodes);
-        
-        // Update job queue
-        this.updateJobQueue(data.jobs);
     }
 
     updateStats(stats) {
@@ -313,70 +297,6 @@ class ClusterDashboard {
         }
     }
 
-    updateJobQueue(jobs) {
-        this.debug('Rendering jobs table, jobs:', jobs.length);
-        this.allJobs = jobs;
-        const tbody = document.getElementById('jobs-table-body');
-        
-        if (jobs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="empty-state"><i class="fas fa-clock"></i><p>No jobs in queue</p></td></tr>';
-            return;
-        }
-
-        // Apply filtering
-        let filteredJobs = this.filterJobs(jobs);
-
-        if (filteredJobs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="empty-state"><i class="fas fa-search"></i><p>No jobs match the current filters</p></td></tr>';
-            return;
-        }
-
-        // Apply sorting
-        if (this.currentJobSort.field) {
-            filteredJobs.sort((a, b) => {
-                let aVal = a[this.currentJobSort.field];
-                let bVal = b[this.currentJobSort.field];
-                
-                // Handle null/undefined
-                if (aVal == null) aVal = '';
-                if (bVal == null) bVal = '';
-                
-                // Compare
-                if (typeof aVal === 'string') {
-                    return this.currentJobSort.ascending ? 
-                        aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-                } else {
-                    return this.currentJobSort.ascending ? 
-                        aVal - bVal : bVal - aVal;
-                }
-            });
-        }
-
-        tbody.innerHTML = filteredJobs.map(job => `
-            <tr>
-                <td><strong>${job.job_id}</strong></td>
-                <td>${this.truncate(job.name, 20)}</td>
-                <td>${job.user}</td>
-                <td><span class="status-badge job-state-${job.state}">${job.state}</span></td>
-                <td>${job.time}</td>
-                <td>${job.nodes}</td>
-                <td>${job.cpus}</td>
-                <td>${job.gpus || 0}</td>
-                <td>${job.partition}</td>
-                <td>${this.truncate(job.node_list, 30)}</td>
-            </tr>
-        `).join('');
-
-        if (this.debugEnabled && typeof console !== 'undefined') {
-            const running = jobs.filter(j => j.state === 'R').length;
-            const pending = jobs.filter(j => j.state === 'PD').length;
-            console.log('[ClusterDashboard] Jobs summary | total=', jobs.length, '| running=', running, '| pending=', pending, '| filtered=', filteredJobs.length);
-            const sample = filteredJobs.slice(0, 10).map(j =>
-                `JOB ${j.job_id} | name=${j.name} | user=${j.user} | state=${j.state} | time=${j.time} | nodes=${j.nodes} | cpus=${j.cpus} | gpus=${j.gpus || 0} | part=${j.partition} | node=${j.node_list}`
-            );
-            sample.forEach(line => console.log('[ClusterDashboard]', line));
-        }
-    }
 
     handleSort(field) {
         if (this.currentSort.field === field) {
@@ -399,56 +319,6 @@ class ClusterDashboard {
         this.updateNodesTable(this.allNodes);
     }
 
-    handleJobFilter(filter) {
-        this.currentJobFilter = filter;
-        this.debug('Job filter changed:', filter);
-        this.updateJobQueue(this.allJobs);
-    }
-
-    handleJobSearch(search) {
-        this.currentJobSearch = search;
-        this.debug('Job search changed:', search);
-        this.updateJobQueue(this.allJobs);
-    }
-
-    handleJobSort(field) {
-        if (this.currentJobSort.field === field) {
-            this.currentJobSort.ascending = !this.currentJobSort.ascending;
-        } else {
-            this.currentJobSort.field = field;
-            this.currentJobSort.ascending = true;
-        }
-        
-        this.updateJobQueue(this.allJobs);
-    }
-
-    filterJobs(jobs) {
-        let filtered = jobs;
-
-        // Apply state filter
-        if (this.currentJobFilter !== 'all') {
-            filtered = filtered.filter(job => job.state === this.currentJobFilter);
-        }
-
-        // Apply search filter
-        if (this.currentJobSearch) {
-            const searchLower = String(this.currentJobSearch || '').toLowerCase();
-            filtered = filtered.filter(job => {
-                const jid = String(job.job_id || '').toLowerCase();
-                const name = String(job.name || '').toLowerCase();
-                const user = String(job.user || '').toLowerCase();
-                const part = String(job.partition || '').toLowerCase();
-                const node = String(job.node_list || '').toLowerCase();
-                return jid.includes(searchLower) ||
-                       name.includes(searchLower) ||
-                       user.includes(searchLower) ||
-                       part.includes(searchLower) ||
-                       node.includes(searchLower);
-            });
-        }
-
-        return filtered;
-    }
 
     updateLastUpdateTime() {
         const now = new Date();

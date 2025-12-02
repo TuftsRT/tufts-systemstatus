@@ -138,39 +138,6 @@
             </div>
         </section>
 
-        <!-- My Jobs Section -->
-        <section class="section">
-            <h2><i class="fas fa-clock"></i> My Jobs</h2>
-            <div class="table-controls">
-                <input type="text" id="job-search" class="search-input" placeholder="Search jobs...">
-                <select id="job-filter" class="filter-select">
-                    <option value="all">All Jobs</option>
-                    <option value="R">Running Only</option>
-                    <option value="PD">Pending Only</option>
-                </select>
-            </div>
-            <div class="table-wrapper table-vertical-scroll">
-                <table class="jobs-table">
-                    <thead>
-                        <tr>
-                            <th data-sort-job="job_id">Job ID <i class="fas fa-sort"></i></th>
-                            <th data-sort-job="name">Name <i class="fas fa-sort"></i></th>
-                            <th data-sort-job="user">User <i class="fas fa-sort"></i></th>
-                            <th data-sort-job="state">State <i class="fas fa-sort"></i></th>
-                            <th data-sort-job="time">Time <i class="fas fa-sort"></i></th>
-                            <th data-sort-job="nodes">Nodes <i class="fas fa-sort"></i></th>
-                            <th data-sort-job="cpus">CPUs <i class="fas fa-sort"></i></th>
-                            <th data-sort-job="gpus">GPUs <i class="fas fa-sort"></i></th>
-                            <th data-sort-job="partition">Partition <i class="fas fa-sort"></i></th>
-                            <th data-sort-job="node_list">Node <i class="fas fa-sort"></i></th>
-                        </tr>
-                    </thead>
-                    <tbody id="jobs-table-body">
-                        <!-- Job rows will be inserted here -->
-                    </tbody>
-                </table>
-            </div>
-        </section>
     </div>
 
     <script src="<%= request.script_name %>/script.js?v=<%= asset_v %>"></script>

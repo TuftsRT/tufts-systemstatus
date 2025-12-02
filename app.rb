@@ -69,19 +69,6 @@ get '/api/partitions' do
   end
 end
 
-# API endpoint for job queue
-get '/api/queue' do
-  content_type :json
-  
-  begin
-    jobs = SlurmParser.parse_queue
-    { success: true, data: jobs }.to_json
-  rescue => e
-    status 500
-    { success: false, error: e.message }.to_json
-  end
-end
-
 # Health check endpoint
 get '/health' do
   content_type :json
