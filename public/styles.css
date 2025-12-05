@@ -30,6 +30,49 @@ body {
     line-height: 1.6;
 }
 
+/* Top Navigation Bar */
+.top-nav {
+    margin-bottom: 15px;
+    padding: 12px 20px;
+    background: var(--bg-card);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: var(--shadow);
+    font-size: 0.95rem;
+}
+
+.top-nav .nav-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.top-nav .nav-link:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.top-nav .nav-separator {
+    color: var(--border);
+    font-size: 0.8rem;
+}
+
+.top-nav .nav-current {
+    color: var(--text-secondary);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .container {
     max-width: 1400px;
     margin: 0 auto;
