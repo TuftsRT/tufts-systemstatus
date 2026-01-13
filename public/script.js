@@ -204,6 +204,7 @@ class ClusterDashboard {
                     <div class="partition-stat">
                         <div class="partition-stat-label">Available CPUs</div>
                         <div class="partition-stat-value">${info.available_cpus}</div>
+                        <div class="partition-stat-subtext">of ${info.total_cpus} total</div>
                     </div>
                     <div class="partition-stat">
                         <div class="partition-stat-label">Time Limit</div>

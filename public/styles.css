@@ -478,6 +478,12 @@ input:checked + .slider:before {
     color: var(--text-primary);
 }
 
+.partition-stat-subtext {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
 /* Table Controls */
 .table-controls {
     display: flex;
