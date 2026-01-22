@@ -91,6 +91,15 @@ class ClusterDashboard {
             partitionsKeys: Object.keys(data.partitions || {})
         });
 
+        // Debug: Log GPU node details for verification
+        if (this.debugEnabled) {
+            const gpuNodes = this.allNodes.filter(n => n.gpu_count > 0);
+            console.log('[ClusterDashboard] GPU Nodes (for verification):');
+            gpuNodes.forEach(n => {
+                console.log(`  ${n.name}: ${n.gpu_free}/${n.gpu_count} free/total (${n.gpu_type || 'unknown'})`);
+            });
+        }
+
         // Update stats
         this.updateStats(data.stats);
         
@@ -281,7 +290,7 @@ class ClusterDashboard {
                 <td>${node.cpus_free} / ${node.cpus_total}</td>
                 <td>${Math.round(node.memory_free / 1024)} GB / ${Math.round(node.memory_total / 1024)} GB</td>
                 <td>${node.gpu_type ? node.gpu_type.toUpperCase() : '-'}</td>
-                <td>${node.gpu_count || '-'}</td>
+                <td>${node.gpu_count ? `${node.gpu_free} / ${node.gpu_count}` : '-'}</td>
                 <td>${node.partitions.join(', ')}</td>
             </tr>
         `).join('');
@@ -292,7 +301,7 @@ class ClusterDashboard {
                 const memTot = Math.round(n.memory_total / 1024);
                 const gpuType = n.gpu_type ? n.gpu_type.toUpperCase() : '-';
                 const parts = n.partitions.join(',');
-                return `NODE ${n.name} | status=${n.status} | cpu=${n.cpus_free}/${n.cpus_total} | memGB=${memFree}/${memTot} | gpu=${gpuType} x${n.gpu_count || 0} | partitions=${parts}`;
+                return `NODE ${n.name} | status=${n.status} | cpu=${n.cpus_free}/${n.cpus_total} | memGB=${memFree}/${memTot} | gpu=${gpuType} ${n.gpu_free || 0}/${n.gpu_count || 0} | partitions=${parts}`;
             });
             sample.forEach(line => console.log('[ClusterDashboard]', line));
         }

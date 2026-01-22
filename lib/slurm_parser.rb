@@ -43,6 +43,18 @@ module SlurmParser
         node[:gpu_type] = nil
         node[:gpu_count] = 0
       end
+
+      # Extract GPU allocation from AllocTRES field
+      # Format: AllocTRES=cpu=8,mem=277G,gres/gpu=4
+      alloc_tres = line[/AllocTRES=(\S+)/, 1]
+      node[:gpu_alloc] = 0
+      if alloc_tres && node[:has_gpu]
+        # Look for gres/gpu=N in the AllocTRES string
+        if alloc_tres =~ /gres\/gpu=(\d+)/
+          node[:gpu_alloc] = $1.to_i
+        end
+      end
+      node[:gpu_free] = node[:gpu_count] - node[:gpu_alloc]
       
       # Extract features
       features = line[/AvailableFeatures=(\S+)/, 1]
