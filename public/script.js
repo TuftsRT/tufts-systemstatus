@@ -98,6 +98,27 @@ class ClusterDashboard {
             gpuNodes.forEach(n => {
                 console.log(`  ${n.name}: ${n.gpu_free}/${n.gpu_count} free/total (${n.gpu_type || 'unknown'})`);
             });
+
+            // Log reserved nodes for verification
+            const nodesWithReservations = this.allNodes.filter(n => n.reservations && n.reservations.length > 0);
+            const activeReservedNodes = this.allNodes.filter(n => n.reservations && n.reservations.some(r => r.state === 'ACTIVE'));
+            console.log('[ClusterDashboard] All Nodes with Reservations:');
+            if (nodesWithReservations.length === 0) {
+                console.log('  No nodes with reservations found');
+            } else {
+                nodesWithReservations.forEach(n => {
+                    n.reservations.forEach(r => {
+                        console.log(`  ${n.name}: reservation="${r.name}" state=${r.state} start=${r.start_time} end=${r.end_time}`);
+                    });
+                });
+            }
+            console.log(`[ClusterDashboard] Nodes with ACTIVE reservations (shown in filter): ${activeReservedNodes.length}`);
+            activeReservedNodes.forEach(n => {
+                const activeRes = n.reservations.filter(r => r.state === 'ACTIVE');
+                activeRes.forEach(r => {
+                    console.log(`  ${n.name}: reservation="${r.name}" start=${r.start_time} end=${r.end_time}`);
+                });
+            });
         }
 
         // Update stats
@@ -252,6 +273,8 @@ class ClusterDashboard {
                     return node.status === 'idle' || node.status === 'mixed';
                 case 'down':
                     return node.status === 'down' || node.status === 'draining';
+                case 'reserved':
+                    return node.reservations && node.reservations.some(r => r.state === 'ACTIVE');
                 default:
                     return true;
             }

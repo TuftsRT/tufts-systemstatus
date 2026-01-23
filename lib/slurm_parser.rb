@@ -225,11 +225,94 @@ module SlurmParser
     (public_partitions + lab_partitions).to_h
   end
 
+  # Parse scontrol show reservations output
+  # Returns a hash mapping node names to their reservation info
+  def self.parse_reservations
+    output = run_command('scontrol show reservations')
+    node_reservations = {}
+
+    current_reservation = nil
+
+    output.each_line do |line|
+      # New reservation starts with ReservationName=
+      if line =~ /ReservationName=(\S+)/
+        current_reservation = {
+          name: $1,
+          start_time: line[/StartTime=(\S+)/, 1],
+          end_time: line[/EndTime=(\S+)/, 1],
+          state: nil,
+          nodes: []
+        }
+      end
+
+      # Extract nodes (can be in format: pax046 or pax[025-026])
+      if line =~ /Nodes=(\S+)/ && current_reservation
+        nodes_str = $1
+        current_reservation[:nodes] = expand_node_list(nodes_str)
+      end
+
+      # Extract state
+      if line =~ /State=(\S+)/ && current_reservation
+        current_reservation[:state] = $1
+
+        # Now that we have all info, map nodes to this reservation
+        current_reservation[:nodes].each do |node_name|
+          node_reservations[node_name] ||= []
+          node_reservations[node_name] << {
+            name: current_reservation[:name],
+            start_time: current_reservation[:start_time],
+            end_time: current_reservation[:end_time],
+            state: current_reservation[:state]
+          }
+        end
+      end
+    end
+
+    node_reservations
+  end
+
+  # Expand SLURM node list notation (e.g., "pax[025-026]" -> ["pax025", "pax026"])
+  def self.expand_node_list(nodes_str)
+    nodes = []
+
+    # Handle comma-separated node specs
+    nodes_str.split(',').each do |spec|
+      if spec =~ /^([a-zA-Z]+)\[([^\]]+)\]$/
+        # Format: prefix[range] e.g., pax[025-026]
+        prefix = $1
+        ranges = $2
+
+        ranges.split(',').each do |range|
+          if range.include?('-')
+            start_num, end_num = range.split('-')
+            width = start_num.length
+            (start_num.to_i..end_num.to_i).each do |num|
+              nodes << "#{prefix}#{num.to_s.rjust(width, '0')}"
+            end
+          else
+            nodes << "#{prefix}#{range}"
+          end
+        end
+      else
+        # Simple node name
+        nodes << spec
+      end
+    end
+
+    nodes
+  end
+
   # Get complete dashboard data
   def self.get_dashboard_data
     nodes = parse_nodes
     partitions = parse_partitions
     all_jobs = parse_all_jobs  # Get all jobs for stats (all users)
+    reservations = parse_reservations  # Get reservation info
+
+    # Add reservation info to each node
+    nodes.each do |node|
+      node[:reservations] = reservations[node[:name]] || []
+    end
     
     {
       timestamp: Time.now.to_i,
