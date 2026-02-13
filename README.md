@@ -39,6 +39,15 @@ This app is designed to run as a Passenger Rack app in Open OnDemand (OOD). No G
 
 3. Launch from the OOD dashboard. The app will be mounted under a sub-URL like `/pun/dev/cluster-dashboard`.
 
+#### Customizing navigation
+
+By default a new menu item named "Cluster Monitor" is added in the "Cluster" menu.  To embeed this inside the standard dashboard view replacing the built in "System Status" make the following changes.
+1. Remove separate menu item for cluster-dashboard
+   - `rm /var/www/ood/apps/sys/cluster-dashboard/manifest.yml`
+2. Replace the build in system-status view
+   - `rm  /var/www/ood/apps/sys/dashboard/app/views/system_status/index.html.erb`
+   - `ln -s /var/www/ood/apps/sys/cluster-dashboard/views/dashboard_iframe.html.erb /var/www/ood/apps/sys/dashboard/app/views/system_status/index.html.erb`
+
 Notes:
 
 - A Gemfile is not necessary. If you add one, OOD will try to run Bundler which may require outbound network access and additional configuration. This app is intentionally Gemfile‑free to work with OOD’s provided environment.
