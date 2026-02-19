@@ -41,12 +41,12 @@ This app is designed to run as a Passenger Rack app in Open OnDemand (OOD). No G
 
 #### Customizing navigation
 
-By default a new menu item named "Cluster Monitor" is added in the "Cluster" menu.  To embeed this inside the standard dashboard view replacing the built in "System Status" make the following changes.
+By default a new menu item named "Cluster Monitor" is added in the "Cluster" menu.  To embeed this inside the standard dashboard view replacing the built in "System Status" make the following changes. The path /etc/ood/config/apps/**dashboard/views/system_status/** to place the override at is derived from the building location /var/www/ood/apps/sys/**dashboard/app/views/system_status/**\index.html.erb
 1. Remove separate menu item for cluster-dashboard
-   - `rm /var/www/ood/apps/sys/cluster-dashboard/manifest.yml`
-2. Replace the build in system-status view
-   - `rm  /var/www/ood/apps/sys/dashboard/app/views/system_status/index.html.erb`
-   - `ln -s /var/www/ood/apps/sys/cluster-dashboard/views/dashboard_iframe.html.erb /var/www/ood/apps/sys/dashboard/app/views/system_status/index.html.erb`
+   - Option A) Set **category:** value in /var/www/ood/apps/sys/cluster-dashboard/manifest.yml to a empty 
+   - Option B) Remove manifest file `rm /var/www/ood/apps/sys/cluster-dashboard/manifest.yml`
+2. Replace the build in system-status view by adding a symbolic link to our new file. 
+   - `ln -s /var/www/ood/apps/sys/cluster-dashboard/views/dashboard_iframe.html.erb /etc/ood/config/apps/dashboard/views/system_status/index.html.erb`
 
 Notes:
 
