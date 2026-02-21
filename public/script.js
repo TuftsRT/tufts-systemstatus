@@ -3,7 +3,7 @@
 class ClusterDashboard {
     constructor() {
         this.autoRefreshInterval = null;
-        this.refreshIntervalMs = 30000; // 30 seconds
+        this.refreshIntervalMs = 120000; // 120 seconds
         this.currentSort = { field: null, ascending: true };
         this.currentFilter = 'all';
         this.currentSearch = '';
