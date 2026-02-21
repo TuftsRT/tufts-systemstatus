@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cluster Monitor Dashboard</title>
+    <title>System Status Dashboard</title>
     <% begin; asset_v = File.mtime(File.expand_path('../public/script.js', __dir__)).to_i; css_v = File.mtime(File.expand_path('../public/styles.css', __dir__)).to_i; rescue; asset_v = css_v = Time.now.to_i; end %>
     <link rel="stylesheet" href="<%= request.script_name %>/styles.css?v=<%= css_v %>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
