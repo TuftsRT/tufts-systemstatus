@@ -160,9 +160,7 @@ module SlurmParser
       when 'idle'
         by_type[type][:available] += count
       when 'mixed', 'allocated'
-        ## For mixed/allocated, estimate based on CPU usage
-        #usage_ratio = node[:cpus_alloc].to_f / node[:cpus_total]
-        in_use =  node[:gpu_alloc] #(count * usage_ratio).round
+        in_use =  node[:gpu_alloc]
         by_type[type][:in_use] += in_use
         by_type[type][:available] += (count - in_use)
       when 'down'
