@@ -187,16 +187,16 @@ class ClusterDashboard {
                             <span class="gpu-stat-label">Available</span>
                             <span class="gpu-stat-value">${available}</span>
                         </div>
-                        <div class="gpu-stat">
-                            <span class="gpu-stat-label">In Use</span>
-                            <span class="gpu-stat-value">${inUse}</span>
-                        </div>
                         ${down > 0 ? `
                         <div class="gpu-stat">
                             <span class="gpu-stat-label">Down</span>
                             <span class="gpu-stat-value">${down}</span>
                         </div>
                         ` : ''}
+                        <div class="gpu-stat">
+                            <span class="gpu-stat-label">In Use</span>
+                            <span class="gpu-stat-value">${inUse}</span>
+                        </div>
                     </div>
                     <div class="gpu-progress">
                         <div class="gpu-progress-bar" style="width: ${usagePercent}%"></div>
