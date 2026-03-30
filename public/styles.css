@@ -107,6 +107,21 @@ body {
     flex-wrap: wrap;
 }
 
+.scope-control {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 200px;
+}
+
+.scope-label {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
 .last-update {
     color: var(--text-secondary);
     font-size: 14px;
@@ -514,6 +529,42 @@ input:checked + .slider:before {
     cursor: pointer;
 }
 
+.top-users-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.top-user-card {
+    background: linear-gradient(135deg, rgba(52, 152, 219, 0.06) 0%, rgba(255, 255, 255, 1) 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+}
+
+.top-user-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--dark);
+    margin-bottom: 10px;
+}
+
+.top-user-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.top-user-metrics span {
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
 /* Tables */
 .table-wrapper {
     overflow-x: auto;
@@ -684,4 +735,3 @@ tbody td {
 .text-danger {
     color: var(--danger) !important;
 }
-

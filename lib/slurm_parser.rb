@@ -82,26 +82,36 @@ module SlurmParser
 
   # Parse sinfo output for partition information
   def self.parse_partitions
-    output = run_command('sinfo -o "%P %a %l %D %t"')
-    partitions = []
-    
-    output.each_line.drop(1).each do |line| # Skip header
-      parts = line.strip.split(/\s+/)
+    output = run_command('sinfo -h -o "%P|%a|%l|%D|%t"')
+    partitions = {}
+
+    output.each_line.each do |line|
+      parts = line.strip.split('|', 5)
       next if parts.length < 5
-      
-      partition = {
-        name: parts[0].gsub('*', ''), # Remove default marker
+
+      name = parts[0].gsub('*', '')
+      partitions[name] ||= {
+        name: name,
         is_default: parts[0].include?('*'),
         available: parts[1] == 'up',
         time_limit: parts[2],
-        nodes_count: parts[3].to_i,
-        state: parts[4]
+        nodes_count: 0,
+        states: []
       }
-      
-      partitions << partition
+
+      partition = partitions[name]
+      partition[:is_default] ||= parts[0].include?('*')
+      partition[:available] &&= (parts[1] == 'up')
+      partition[:time_limit] = parts[2] if partition[:time_limit].to_s.empty?
+      partition[:nodes_count] += parts[3].to_i
+      partition[:states] << parts[4] unless parts[4].to_s.empty?
     end
-    
-    partitions
+
+    partitions.values.map do |partition|
+      states = partition.delete(:states).uniq
+      partition[:state] = states.length == 1 ? states.first : 'mixed'
+      partition
+    end
   end
 
   # Parse squeue output for ALL jobs (all users)
@@ -315,6 +325,7 @@ module SlurmParser
     {
       timestamp: Time.now.to_i,
       nodes: nodes,
+      jobs_raw: all_jobs,
       partitions: partition_summary(partitions, nodes),
       gpu_summary: gpu_summary(nodes),
       stats: {
@@ -330,4 +341,3 @@ module SlurmParser
     }
   end
 end
-

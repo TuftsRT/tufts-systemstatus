@@ -3,15 +3,21 @@
 class ClusterDashboard {
     constructor() {
         this.autoRefreshInterval = null;
-        this.refreshIntervalMs = 120000; // 120 seconds
+        this.refreshIntervalMs = 120000;
         this.currentSort = { field: null, ascending: true };
         this.currentFilter = 'all';
         this.currentSearch = '';
+        this.currentPartitionScope = 'all';
         this.allNodes = [];
-        // Debug mode: enable by visiting the page with ?debug=1
+        this.allJobs = [];
+        this.allPartitions = {};
+        this.scopedNodes = [];
+        this.scopedPartitions = {};
+        this.scopedStats = {};
+        this.lastData = null;
         const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
         this.debugEnabled = (params && params.get('debug') === '1') || (typeof window !== 'undefined' && window.DASHBOARD_DEBUG === true);
-        
+
         this.init();
     }
 
@@ -22,21 +28,17 @@ class ClusterDashboard {
     }
 
     init() {
-        // Set up event listeners
         document.getElementById('refresh-btn').addEventListener('click', () => this.loadData());
         document.getElementById('auto-refresh-toggle').addEventListener('change', (e) => this.toggleAutoRefresh(e.target.checked));
         document.getElementById('node-search').addEventListener('input', (e) => this.handleSearch(e.target.value));
         document.getElementById('node-filter').addEventListener('change', (e) => this.handleFilter(e.target.value));
-        
-        // Set up table sorting for nodes
+        document.getElementById('global-partition-filter').addEventListener('change', (e) => this.handlePartitionScope(e.target.value));
+
         document.querySelectorAll('thead th[data-sort]').forEach(th => {
             th.addEventListener('click', () => this.handleSort(th.dataset.sort));
         });
 
-        // Initial data load
         this.loadData();
-        
-        // Start auto-refresh
         this.toggleAutoRefresh(true);
     }
 
@@ -63,14 +65,6 @@ class ClusterDashboard {
             if (!result.success) {
                 throw new Error(result.error || 'Failed to load data');
             }
-            this.debug('testing testing 123');
-
-            this.debug('Fetched dashboard data at', new Date().toISOString(), {
-                stats: result.data?.stats,
-                gpuTypes: Object.keys(result.data?.gpu_summary || {}),
-                partitions: Object.keys(result.data?.partitions || {}),
-                nodes: (result.data?.nodes || []).length
-            });
 
             this.renderDashboard(result.data);
             this.updateLastUpdateTime();
@@ -83,55 +77,132 @@ class ClusterDashboard {
     }
 
     renderDashboard(data) {
-        this.allNodes = data.nodes;
-        
-        this.debug('Rendering dashboard...', {
-            totalNodes: this.allNodes.length,
-            gpuSummary: data.gpu_summary,
-            partitionsKeys: Object.keys(data.partitions || {})
-        });
+        this.lastData = data;
+        this.allNodes = data.nodes || [];
+        this.allJobs = data.jobs_raw || [];
+        this.allPartitions = data.partitions || {};
 
-        // Debug: Log GPU node details for verification
-        if (this.debugEnabled) {
-            const gpuNodes = this.allNodes.filter(n => n.gpu_count > 0);
-            console.log('[ClusterDashboard] GPU Nodes (for verification):');
-            gpuNodes.forEach(n => {
-                console.log(`  ${n.name}: ${n.gpu_free}/${n.gpu_count} free/total (${n.gpu_type || 'unknown'})`);
-            });
+        this.updatePartitionScopeOptions();
+        this.applyPartitionScope(data);
+    }
 
-            // Log reserved nodes for verification
-            const nodesWithReservations = this.allNodes.filter(n => n.reservations && n.reservations.length > 0);
-            const activeReservedNodes = this.allNodes.filter(n => n.reservations && n.reservations.some(r => r.state === 'ACTIVE'));
-            console.log('[ClusterDashboard] All Nodes with Reservations:');
-            if (nodesWithReservations.length === 0) {
-                console.log('  No nodes with reservations found');
-            } else {
-                nodesWithReservations.forEach(n => {
-                    n.reservations.forEach(r => {
-                        console.log(`  ${n.name}: reservation="${r.name}" state=${r.state} start=${r.start_time} end=${r.end_time}`);
-                    });
-                });
-            }
-            console.log(`[ClusterDashboard] Nodes with ACTIVE reservations (shown in filter): ${activeReservedNodes.length}`);
-            activeReservedNodes.forEach(n => {
-                const activeRes = n.reservations.filter(r => r.state === 'ACTIVE');
-                activeRes.forEach(r => {
-                    console.log(`  ${n.name}: reservation="${r.name}" start=${r.start_time} end=${r.end_time}`);
-                });
-            });
+    updatePartitionScopeOptions() {
+        const select = document.getElementById('global-partition-filter');
+        const names = [...new Set(Object.keys(this.allPartitions || {}))].sort((a, b) => a.localeCompare(b));
+
+        select.innerHTML = ['<option value="all">All Partitions</option>']
+            .concat(names.map((name) => `<option value="${name}">${name}</option>`))
+            .join('');
+
+        if ([...select.options].some((option) => option.value === this.currentPartitionScope)) {
+            select.value = this.currentPartitionScope;
+        } else {
+            this.currentPartitionScope = 'all';
+            select.value = 'all';
+        }
+    }
+
+    applyPartitionScope(data) {
+        const scoped = this.currentPartitionScope === 'all'
+            ? this.buildFullScope(data)
+            : this.buildPartitionScope(this.currentPartitionScope);
+
+        this.scopedNodes = scoped.nodes;
+        this.scopedPartitions = scoped.partitions;
+        this.scopedStats = scoped.stats;
+
+        this.debug('Applying partition scope', this.currentPartitionScope, scoped);
+
+        this.updateStats(scoped.stats);
+        this.updateGPUCards(scoped.gpuSummary);
+        this.updatePartitions(scoped.partitions);
+        this.updateTopUsers(scoped.topUsers, scoped.scopeName);
+        this.updateNodesTable(scoped.nodes);
+    }
+
+    buildFullScope(data) {
+        return {
+            scopeName: null,
+            nodes: this.allNodes,
+            partitions: this.allPartitions,
+            stats: data.stats || {},
+            gpuSummary: data.gpu_summary || {},
+            topUsers: []
+        };
+    }
+
+    buildPartitionScope(partitionName) {
+        const nodes = this.allNodes.filter((node) => (node.partitions || []).includes(partitionName));
+        const jobs = this.allJobs.filter((job) => job.partition === partitionName);
+        const partitions = {};
+        if (this.allPartitions[partitionName]) {
+            partitions[partitionName] = this.allPartitions[partitionName];
         }
 
-        // Update stats
-        this.updateStats(data.stats);
-        
-        // Update GPU overview
-        this.updateGPUCards(data.gpu_summary);
-        
-        // Update partitions
-        this.updatePartitions(data.partitions);
-        
-        // Update nodes table
-        this.updateNodesTable(this.allNodes);
+        return {
+            scopeName: partitionName,
+            nodes,
+            partitions,
+            stats: this.computeScopedStats(nodes, jobs),
+            gpuSummary: this.computeScopedGpuSummary(nodes),
+            topUsers: this.computeTopUsers(jobs)
+        };
+    }
+
+    computeScopedStats(nodes, jobs) {
+        return {
+            total_nodes: nodes.length,
+            total_cpus: nodes.reduce((sum, node) => sum + (node.cpus_total || 0), 0),
+            available_cpus: nodes.reduce((sum, node) => sum + (node.cpus_free || 0), 0),
+            total_memory_mb: nodes.reduce((sum, node) => sum + (node.memory_total || 0), 0),
+            available_memory_mb: nodes.reduce((sum, node) => sum + (node.memory_free || 0), 0),
+            total_jobs: jobs.length,
+            running_jobs: jobs.filter((job) => job.state === 'R').length,
+            pending_jobs: jobs.filter((job) => job.state === 'PD').length
+        };
+    }
+
+    computeScopedGpuSummary(nodes) {
+        const summary = {};
+        nodes.filter((node) => node.has_gpu).forEach((node) => {
+            const type = node.gpu_type || 'gpu';
+            if (!summary[type]) {
+                summary[type] = { total: 0, available: 0, in_use: 0, down: 0 };
+            }
+
+            summary[type].total += node.gpu_count || 0;
+
+            if (node.status === 'down') {
+                summary[type].down += node.gpu_count || 0;
+            } else {
+                summary[type].in_use += node.gpu_alloc || 0;
+                summary[type].available += node.gpu_free || 0;
+            }
+        });
+
+        return summary;
+    }
+
+    computeTopUsers(jobs) {
+        const users = {};
+
+        jobs.forEach((job) => {
+            if (!job.user) return;
+
+            users[job.user] ||= { user: job.user, jobs: 0, running: 0, pending: 0, gpus: 0 };
+            users[job.user].jobs += 1;
+            users[job.user].running += job.state === 'R' ? 1 : 0;
+            users[job.user].pending += job.state === 'PD' ? 1 : 0;
+            users[job.user].gpus += job.gpus || 0;
+        });
+
+        return Object.values(users)
+            .sort((a, b) => {
+                if (b.jobs !== a.jobs) return b.jobs - a.jobs;
+                if (b.running !== a.running) return b.running - a.running;
+                return a.user.localeCompare(b.user);
+            })
+            .slice(0, 8);
     }
 
     updateStats(stats) {
@@ -139,12 +210,12 @@ class ClusterDashboard {
         document.getElementById('stat-total-nodes').textContent = stats.total_nodes;
         document.getElementById('stat-available-cpus').textContent = stats.available_cpus;
         document.getElementById('stat-total-cpus').textContent = `of ${stats.total_cpus} total`;
-        
-        const availMemGB = Math.round(stats.available_memory_mb / 1024);
-        const totalMemGB = Math.round(stats.total_memory_mb / 1024);
+
+        const availMemGB = Math.round((stats.available_memory_mb || 0) / 1024);
+        const totalMemGB = Math.round((stats.total_memory_mb || 0) / 1024);
         document.getElementById('stat-available-memory').textContent = `${availMemGB} GB`;
         document.getElementById('stat-total-memory').textContent = `of ${totalMemGB} GB total`;
-        
+
         document.getElementById('stat-running-jobs').textContent = stats.running_jobs;
         document.getElementById('stat-total-jobs').textContent = `${stats.total_jobs} total jobs`;
     }
@@ -152,7 +223,7 @@ class ClusterDashboard {
     updateGPUCards(gpuSummary) {
         this.debug('GPU summary', gpuSummary);
         const container = document.getElementById('gpu-cards');
-        
+
         if (Object.keys(gpuSummary).length === 0) {
             container.innerHTML = '<div class="empty-state"><i class="fas fa-microchip"></i><p>No GPU nodes found</p></div>';
             return;
@@ -167,7 +238,7 @@ class ClusterDashboard {
             const inUse = stats.in_use;
             const down = stats.down;
             const usagePercent = total > 0 ? Math.round((inUse / total) * 100) : 0;
-            
+
             const color1 = colors[colorIndex % colors.length];
             const color2 = colors[(colorIndex + 1) % colors.length];
             colorIndex++;
@@ -209,13 +280,14 @@ class ClusterDashboard {
     updatePartitions(partitions) {
         this.debug('Partitions summary', partitions);
         const container = document.getElementById('partition-cards');
-        
-        if (Object.keys(partitions).length === 0) {
+        const entries = Object.entries(partitions || {});
+
+        if (entries.length === 0) {
             container.innerHTML = '<div class="empty-state"><i class="fas fa-layer-group"></i><p>No partitions found</p></div>';
             return;
         }
 
-        container.innerHTML = Object.entries(partitions).map(([name, info]) => `
+        container.innerHTML = entries.map(([name, info]) => `
             <div class="partition-card ${info.is_default ? 'default' : ''}">
                 <div class="partition-header">
                     <div class="partition-name">${name}</div>
@@ -245,13 +317,41 @@ class ClusterDashboard {
         `).join('');
     }
 
+    updateTopUsers(topUsers, scopeName) {
+        const section = document.getElementById('top-users-section');
+        const container = document.getElementById('top-users-content');
+
+        if (this.currentPartitionScope === 'all') {
+            section.classList.add('hidden');
+            container.innerHTML = '';
+            return;
+        }
+
+        section.classList.remove('hidden');
+
+        if (!topUsers.length) {
+            container.innerHTML = `<div class="empty-state"><i class="fas fa-users"></i><p>No jobs currently visible in ${scopeName}</p></div>`;
+            return;
+        }
+
+        container.innerHTML = topUsers.map((entry) => `
+            <div class="top-user-card">
+                <div class="top-user-name">${entry.user}</div>
+                <div class="top-user-metrics">
+                    <span>${entry.jobs} jobs</span>
+                    <span>${entry.running} running</span>
+                    <span>${entry.pending} pending</span>
+                    ${entry.gpus > 0 ? `<span>${entry.gpus} GPUs</span>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
     updateNodesTable(nodes) {
         this.debug('Rendering nodes table, total nodes:', nodes.length);
         const tbody = document.getElementById('nodes-table-body');
-        
-        // Apply filters
+
         let filteredNodes = nodes.filter(node => {
-            // Search filter
             if (this.currentSearch) {
                 const searchLower = this.currentSearch.toLowerCase();
                 const partitionsStr = (node.partitions || []).join(',').toLowerCase();
@@ -262,8 +362,7 @@ class ClusterDashboard {
                     return false;
                 }
             }
-            
-            // Type filter
+
             switch (this.currentFilter) {
                 case 'idle':
                     return node.status === 'idle';
@@ -279,28 +378,25 @@ class ClusterDashboard {
                     return true;
             }
         });
-        
-        // Apply sorting
+
         if (this.currentSort.field) {
             filteredNodes.sort((a, b) => {
                 let aVal = a[this.currentSort.field];
                 let bVal = b[this.currentSort.field];
-                
-                // Handle null/undefined
+
                 if (aVal == null) aVal = '';
                 if (bVal == null) bVal = '';
-                
-                // Compare
+
                 if (typeof aVal === 'string') {
-                    return this.currentSort.ascending ? 
+                    return this.currentSort.ascending ?
                         aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
                 } else {
-                    return this.currentSort.ascending ? 
+                    return this.currentSort.ascending ?
                         aVal - bVal : bVal - aVal;
                 }
             });
         }
-        
+
         if (filteredNodes.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fas fa-search"></i><p>No nodes found</p></td></tr>';
             return;
@@ -317,19 +413,7 @@ class ClusterDashboard {
                 <td>${node.partitions.join(', ')}</td>
             </tr>
         `).join('');
-
-        if (this.debugEnabled && typeof console !== 'undefined') {
-            const sample = filteredNodes.slice(0, 10).map(n => {
-                const memFree = Math.round(n.memory_free / 1024);
-                const memTot = Math.round(n.memory_total / 1024);
-                const gpuType = n.gpu_type ? n.gpu_type.toUpperCase() : '-';
-                const parts = n.partitions.join(',');
-                return `NODE ${n.name} | status=${n.status} | cpu=${n.cpus_free}/${n.cpus_total} | memGB=${memFree}/${memTot} | gpu=${gpuType} ${n.gpu_free || 0}/${n.gpu_count || 0} | partitions=${parts}`;
-            });
-            sample.forEach(line => console.log('[ClusterDashboard]', line));
-        }
     }
-
 
     handleSort(field) {
         if (this.currentSort.field === field) {
@@ -338,20 +422,26 @@ class ClusterDashboard {
             this.currentSort.field = field;
             this.currentSort.ascending = true;
         }
-        
-        this.updateNodesTable(this.allNodes);
+
+        this.updateNodesTable(this.scopedNodes);
     }
 
     handleFilter(filter) {
         this.currentFilter = filter;
-        this.updateNodesTable(this.allNodes);
+        this.updateNodesTable(this.scopedNodes);
     }
 
     handleSearch(search) {
         this.currentSearch = search;
-        this.updateNodesTable(this.allNodes);
+        this.updateNodesTable(this.scopedNodes);
     }
 
+    handlePartitionScope(scope) {
+        this.currentPartitionScope = scope;
+        if (this.lastData) {
+            this.applyPartitionScope(this.lastData);
+        }
+    }
 
     updateLastUpdateTime() {
         const now = new Date();
@@ -373,31 +463,15 @@ class ClusterDashboard {
         const errorText = document.getElementById('error-text');
         errorText.textContent = message;
         errorDiv.classList.remove('hidden');
-        
-        // Auto-hide after 5 seconds
+
         setTimeout(() => this.hideError(), 5000);
     }
 
     hideError() {
         document.getElementById('error-message').classList.add('hidden');
     }
-
-    truncate(str, maxLength) {
-        if (!str) return '';
-        return str.length > maxLength ? str.substring(0, maxLength) + '...' : str;
-    }
-
-    formatBytes(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-    }
 }
 
-// Initialize dashboard when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     window.dashboard = new ClusterDashboard();
 });
-
