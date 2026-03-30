@@ -1,5 +1,6 @@
 require 'sinatra'
 require 'json'
+require 'etc'
 require_relative 'lib/slurm_parser'
 
 # Configure Sinatra
@@ -8,6 +9,22 @@ set :public_folder, File.expand_path('public', __dir__)
 set :views, File.expand_path('views', __dir__)
 set :static, true
 enable :static
+
+helpers do
+  def current_username
+    request.env['REMOTE_USER'] || Etc.getpwuid(Process.uid).name
+  rescue StandardError
+    ENV['USER'] || Etc.getlogin
+  end
+
+  def user_in_group?(username, group_name)
+    group = Etc.getgrnam(group_name)
+    user = Etc.getpwnam(username)
+    group.mem.include?(username) || user.gid == group.gid
+  rescue StandardError
+    false
+  end
+end
 
 # Main dashboard page
 get '/' do
@@ -20,6 +37,23 @@ get '/api/data' do
   
   begin
     data = SlurmParser.get_dashboard_data
+    can_view_restricted_top_users = user_in_group?(current_username, 'tts_rsch_hpc_admin')
+    restricted_partitions = %w[batch gpu]
+
+    unless can_view_restricted_top_users
+      data[:jobs_raw] = (data[:jobs_raw] || []).map do |job|
+        if restricted_partitions.include?(job[:partition])
+          job.merge(user: nil)
+        else
+          job
+        end
+      end
+    end
+
+    data[:permissions] = {
+      can_view_restricted_top_users: can_view_restricted_top_users
+    }
+
     { success: true, data: data }.to_json
   rescue => e
     status 500
@@ -74,4 +108,3 @@ get '/health' do
   content_type :json
   { status: 'ok', timestamp: Time.now.to_i }.to_json
 end
-

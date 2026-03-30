@@ -15,6 +15,7 @@ class ClusterDashboard {
         this.scopedPartitions = {};
         this.scopedStats = {};
         this.lastData = null;
+        this.permissions = { can_view_restricted_top_users: false };
         const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
         this.debugEnabled = (params && params.get('debug') === '1') || (typeof window !== 'undefined' && window.DASHBOARD_DEBUG === true);
 
@@ -81,6 +82,7 @@ class ClusterDashboard {
         this.allNodes = data.nodes || [];
         this.allJobs = data.jobs_raw || [];
         this.allPartitions = data.partitions || {};
+        this.permissions = data.permissions || { can_view_restricted_top_users: false };
 
         this.updatePartitionScopeOptions();
         this.applyPartitionScope(data);
@@ -320,6 +322,7 @@ class ClusterDashboard {
     updateTopUsers(topUsers, scopeName) {
         const section = document.getElementById('top-users-section');
         const container = document.getElementById('top-users-content');
+        const isRestrictedPartition = ['batch', 'gpu'].includes(scopeName);
 
         if (this.currentPartitionScope === 'all') {
             section.classList.add('hidden');
@@ -328,6 +331,16 @@ class ClusterDashboard {
         }
 
         section.classList.remove('hidden');
+
+        if (isRestrictedPartition && !this.permissions.can_view_restricted_top_users) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-user-shield"></i>
+                    <p>Top users for ${scopeName} are only visible to members of the tts_rsch_hpc_admin group.</p>
+                </div>
+            `;
+            return;
+        }
 
         if (!topUsers.length) {
             container.innerHTML = `<div class="empty-state"><i class="fas fa-users"></i><p>No jobs currently visible in ${scopeName}</p></div>`;
