@@ -330,17 +330,13 @@ class ClusterDashboard {
             return;
         }
 
-        section.classList.remove('hidden');
-
         if (isRestrictedPartition && !this.permissions.can_view_restricted_top_users) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-user-shield"></i>
-                    <p>Top users for ${scopeName} are only visible to members of the tts_rsch_hpc_admin group.</p>
-                </div>
-            `;
+            section.classList.add('hidden');
+            container.innerHTML = '';
             return;
         }
+
+        section.classList.remove('hidden');
 
         if (!topUsers.length) {
             container.innerHTML = `<div class="empty-state"><i class="fas fa-users"></i><p>No jobs currently visible in ${scopeName}</p></div>`;
