@@ -2,6 +2,26 @@ require 'open3'
 require 'json'
 
 module SlurmParser
+  def self.parse_job_gpu_count(gpu_field)
+    value = gpu_field.to_s.strip
+    return 0 if value.empty? || value == 'N/A' || value == '(null)'
+
+    value.split(',').sum do |entry|
+      token = entry.strip
+      next 0 unless token.include?('gpu')
+
+      if token =~ /gpu:\w+:(\d+)/
+        $1.to_i
+      elsif token =~ /gpu:(\d+)/
+        $1.to_i
+      elsif token =~ /gpu$/
+        1
+      else
+        0
+      end
+    end
+  end
+
   # Execute a command and return stdout
   def self.run_command(cmd)
     stdout, stderr, status = Open3.capture3(cmd)
@@ -124,16 +144,8 @@ module SlurmParser
       parts = line.strip.split(/\s+/, 10)
       next if parts.length < 9
       
-      # Parse GPU allocation from TRES format (e.g., "gres/gpu:a100:1" or "gres/gpu:2" or "N/A")
       gpu_tres = parts[7] || ''
-      gpus = 0
-      if gpu_tres =~ /gpu:(\w+):(\d+)/
-        # Format: gres/gpu:TYPE:COUNT (e.g., gres/gpu:a100:1)
-        gpus = $2.to_i
-      elsif gpu_tres =~ /gpu:(\d+)/
-        # Format: gres/gpu:COUNT (e.g., gres/gpu:2)
-        gpus = $1.to_i
-      end
+      gpus = parse_job_gpu_count(gpu_tres)
       
       job = {
         job_id: parts[0],
