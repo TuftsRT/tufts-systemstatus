@@ -38,15 +38,10 @@ get '/api/data' do
   begin
     data = SlurmParser.get_dashboard_data
     can_view_restricted_top_users = user_in_group?(current_username, 'tts_rsch_hpc_admin')
-    restricted_partitions = %w[batch gpu]
 
     unless can_view_restricted_top_users
       data[:jobs_raw] = (data[:jobs_raw] || []).map do |job|
-        if restricted_partitions.include?(job[:partition])
-          job.merge(user: nil)
-        else
-          job
-        end
+        job.merge(user: nil)
       end
     end
 

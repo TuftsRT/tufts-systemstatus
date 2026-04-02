@@ -322,15 +322,8 @@ class ClusterDashboard {
     updateTopUsers(topUsers, scopeName) {
         const section = document.getElementById('top-users-section');
         const container = document.getElementById('top-users-content');
-        const isRestrictedPartition = ['batch', 'gpu'].includes(scopeName);
 
-        if (this.currentPartitionScope === 'all') {
-            section.classList.add('hidden');
-            container.innerHTML = '';
-            return;
-        }
-
-        if (isRestrictedPartition && !this.permissions.can_view_restricted_top_users) {
+        if (this.currentPartitionScope === 'all' || !this.permissions.can_view_restricted_top_users) {
             section.classList.add('hidden');
             container.innerHTML = '';
             return;

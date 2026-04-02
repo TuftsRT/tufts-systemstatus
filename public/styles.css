@@ -109,17 +109,8 @@ body {
 
 .scope-control {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    align-items: center;
     min-width: 200px;
-}
-
-.scope-label {
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
 }
 
 .last-update {
@@ -130,6 +121,7 @@ body {
 /* Buttons */
 .btn {
     padding: 10px 20px;
+    min-height: 44px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
@@ -508,6 +500,7 @@ input:checked + .slider:before {
 
 .search-input, .filter-select {
     padding: 10px 15px;
+    min-height: 44px;
     border: 2px solid var(--border);
     border-radius: 8px;
     font-size: 14px;
