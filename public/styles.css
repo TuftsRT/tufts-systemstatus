@@ -113,6 +113,14 @@ body {
     min-width: 200px;
 }
 
+.scope-control .filter-select {
+    height: 44px;
+    min-height: 44px;
+    padding-top: 0;
+    padding-bottom: 0;
+    box-sizing: border-box;
+}
+
 .last-update {
     color: var(--text-secondary);
     font-size: 14px;
