@@ -103,19 +103,19 @@ body {
 .header-controls {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 12px;
     flex-wrap: wrap;
 }
 
 .scope-control {
     display: flex;
     align-items: center;
-    min-width: 200px;
+    min-width: 180px;
 }
 
 .scope-control .filter-select {
-    height: 44px;
-    min-height: 44px;
+    height: 38px;
+    min-height: 38px;
     padding-top: 0;
     padding-bottom: 0;
     box-sizing: border-box;
@@ -128,8 +128,8 @@ body {
 
 /* Buttons */
 .btn {
-    padding: 10px 20px;
-    min-height: 44px;
+    padding: 8px 18px;
+    min-height: 38px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
@@ -507,8 +507,8 @@ input:checked + .slider:before {
 }
 
 .search-input, .filter-select {
-    padding: 10px 15px;
-    min-height: 44px;
+    padding: 8px 14px;
+    min-height: 38px;
     border: 2px solid var(--border);
     border-radius: 8px;
     font-size: 14px;
