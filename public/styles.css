@@ -92,6 +92,13 @@ body {
     gap: 15px;
 }
 
+.header-main {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
 .header h1 {
     color: var(--dark);
     font-size: 28px;
@@ -111,6 +118,7 @@ body {
     display: flex;
     align-items: center;
     min-width: 180px;
+    margin-left: 4px;
 }
 
 .scope-control .filter-select {
