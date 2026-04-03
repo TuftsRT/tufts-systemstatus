@@ -2,6 +2,30 @@ require 'open3'
 require 'json'
 
 module SlurmParser
+  def self.schedulable_node?(node)
+    %w[idle mixed allocated].include?(node[:status])
+  end
+
+  def self.parse_job_gpu_count(gpu_field)
+    value = gpu_field.to_s.strip
+    return 0 if value.empty? || value == 'N/A' || value == '(null)'
+
+    value.split(',').sum do |entry|
+      token = entry.strip
+      next 0 unless token.include?('gpu')
+
+      if token =~ /gpu:\w+:(\d+)/
+        $1.to_i
+      elsif token =~ /gpu:(\d+)/
+        $1.to_i
+      elsif token =~ /gpu$/
+        1
+      else
+        0
+      end
+    end
+  end
+
   # Execute a command and return stdout
   def self.run_command(cmd)
     stdout, stderr, status = Open3.capture3(cmd)
@@ -54,25 +78,24 @@ module SlurmParser
           node[:gpu_alloc] = $1.to_i
         end
       end
-      node[:gpu_free] = node[:gpu_count] - node[:gpu_alloc]
-      
       # Extract features
       features = line[/AvailableFeatures=(\S+)/, 1]
       node[:features] = features ? features.split(',') : []
-      
-      # Calculate availability
-      node[:cpus_free] = node[:cpus_total] - node[:cpus_alloc]
-      node[:memory_free] = node[:memory_total] - node[:memory_alloc]
-      
+
       # Simplified state
       node[:status] = case node[:state]
+      when /DOWN/, /NOT_RESPONDING/, /FAIL/ then 'down'
+      when /DRAIN/, /DRAINING/ then 'draining'
       when /IDLE/ then 'idle'
       when /MIXED/ then 'mixed'
       when /ALLOCATED/, /ALLOC/ then 'allocated'
-      when /DOWN/ then 'down'
-      when /DRAIN/ then 'draining'
       else 'unknown'
       end
+
+      # Only schedulable nodes should contribute free capacity.
+      node[:cpus_free] = schedulable_node?(node) ? (node[:cpus_total] - node[:cpus_alloc]) : 0
+      node[:memory_free] = schedulable_node?(node) ? (node[:memory_total] - node[:memory_alloc]) : 0
+      node[:gpu_free] = schedulable_node?(node) ? (node[:gpu_count] - node[:gpu_alloc]) : 0
       
       nodes << node
     end
@@ -82,26 +105,36 @@ module SlurmParser
 
   # Parse sinfo output for partition information
   def self.parse_partitions
-    output = run_command('sinfo -o "%P %a %l %D %t"')
-    partitions = []
-    
-    output.each_line.drop(1).each do |line| # Skip header
-      parts = line.strip.split(/\s+/)
+    output = run_command('sinfo -h -o "%P|%a|%l|%D|%t"')
+    partitions = {}
+
+    output.each_line.each do |line|
+      parts = line.strip.split('|', 5)
       next if parts.length < 5
-      
-      partition = {
-        name: parts[0].gsub('*', ''), # Remove default marker
+
+      name = parts[0].gsub('*', '')
+      partitions[name] ||= {
+        name: name,
         is_default: parts[0].include?('*'),
         available: parts[1] == 'up',
         time_limit: parts[2],
-        nodes_count: parts[3].to_i,
-        state: parts[4]
+        nodes_count: 0,
+        states: []
       }
-      
-      partitions << partition
+
+      partition = partitions[name]
+      partition[:is_default] ||= parts[0].include?('*')
+      partition[:available] &&= (parts[1] == 'up')
+      partition[:time_limit] = parts[2] if partition[:time_limit].to_s.empty?
+      partition[:nodes_count] += parts[3].to_i
+      partition[:states] << parts[4] unless parts[4].to_s.empty?
     end
-    
-    partitions
+
+    partitions.values.map do |partition|
+      states = partition.delete(:states).uniq
+      partition[:state] = states.length == 1 ? states.first : 'mixed'
+      partition
+    end
   end
 
   # Parse squeue output for ALL jobs (all users)
@@ -114,16 +147,8 @@ module SlurmParser
       parts = line.strip.split(/\s+/, 10)
       next if parts.length < 9
       
-      # Parse GPU allocation from TRES format (e.g., "gres/gpu:a100:1" or "gres/gpu:2" or "N/A")
       gpu_tres = parts[7] || ''
-      gpus = 0
-      if gpu_tres =~ /gpu:(\w+):(\d+)/
-        # Format: gres/gpu:TYPE:COUNT (e.g., gres/gpu:a100:1)
-        gpus = $2.to_i
-      elsif gpu_tres =~ /gpu:(\d+)/
-        # Format: gres/gpu:COUNT (e.g., gres/gpu:2)
-        gpus = $1.to_i
-      end
+      gpus = parse_job_gpu_count(gpu_tres)
       
       job = {
         job_id: parts[0],
@@ -163,7 +188,7 @@ module SlurmParser
         in_use =  node[:gpu_alloc]
         by_type[type][:in_use] += in_use
         by_type[type][:available] += (count - in_use)
-      when 'down'
+      when 'down', 'draining'
         by_type[type][:down] += count
       end
     end
@@ -177,6 +202,7 @@ module SlurmParser
     
     partitions.each do |partition|
       partition_nodes = nodes.select { |n| n[:partitions].include?(partition[:name]) }
+      schedulable_nodes = partition_nodes.select { |n| schedulable_node?(n) }
       
       summary[partition[:name]] = {
         total_nodes: partition_nodes.count,
@@ -185,7 +211,7 @@ module SlurmParser
         allocated_nodes: partition_nodes.count { |n| n[:status] == 'allocated' },
         down_nodes: partition_nodes.count { |n| n[:status] == 'down' },
         total_cpus: partition_nodes.sum { |n| n[:cpus_total] },
-        available_cpus: partition_nodes.sum { |n| n[:cpus_free] },
+        available_cpus: schedulable_nodes.sum { |n| n[:cpus_free] },
         has_gpu: partition_nodes.any? { |n| n[:has_gpu] },
         time_limit: partition[:time_limit],
         is_default: partition[:is_default]
@@ -306,6 +332,7 @@ module SlurmParser
     partitions = parse_partitions
     all_jobs = parse_all_jobs  # Get all jobs for stats (all users)
     reservations = parse_reservations  # Get reservation info
+    schedulable_nodes = nodes.select { |node| schedulable_node?(node) }
 
     # Add reservation info to each node
     nodes.each do |node|
@@ -315,14 +342,15 @@ module SlurmParser
     {
       timestamp: Time.now.to_i,
       nodes: nodes,
+      jobs_raw: all_jobs,
       partitions: partition_summary(partitions, nodes),
       gpu_summary: gpu_summary(nodes),
       stats: {
         total_nodes: nodes.count,
         total_cpus: nodes.sum { |n| n[:cpus_total] },
-        available_cpus: nodes.sum { |n| n[:cpus_free] },
+        available_cpus: schedulable_nodes.sum { |n| n[:cpus_free] },
         total_memory_mb: nodes.sum { |n| n[:memory_total] },
-        available_memory_mb: nodes.sum { |n| n[:memory_free] },
+        available_memory_mb: schedulable_nodes.sum { |n| n[:memory_free] },
         total_jobs: all_jobs.count,            # Count all jobs across all users
         running_jobs: all_jobs.count { |j| j[:state] == 'R' },  # Count running jobs from all users
         pending_jobs: all_jobs.count { |j| j[:state] == 'PD' }  # Count pending jobs from all users
@@ -330,4 +358,3 @@ module SlurmParser
     }
   end
 end
-

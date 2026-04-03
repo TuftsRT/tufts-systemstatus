@@ -17,7 +17,14 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1><i class="fas fa-server"></i> System Status</h1>
+            <div class="header-main">
+                <h1><i class="fas fa-server"></i> System Status</h1>
+                <div class="scope-control">
+                    <select id="global-partition-filter" class="filter-select">
+                        <option value="all">All Partitions</option>
+                    </select>
+                </div>
+            </div>
             <div class="header-controls">
                 <div class="last-update">
                     Last updated: <span id="last-update-time">Never</span>
@@ -106,6 +113,13 @@
             </div>
         </section>
 
+        <section id="top-users-section" class="section hidden">
+            <h2><i class="fas fa-users"></i> Active Users In Selected Partition</h2>
+            <div id="top-users-content" class="top-users-list">
+                <!-- Top users will be inserted here -->
+            </div>
+        </section>
+
         <!-- Nodes Table -->
         <section class="section">
             <h2><i class="fas fa-list"></i> Node Details</h2>
@@ -145,4 +159,3 @@
     <script src="<%= request.script_name %>/script.js?v=<%= asset_v %>"></script>
 </body>
 </html>
-

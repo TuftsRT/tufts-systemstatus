@@ -92,6 +92,13 @@ body {
     gap: 15px;
 }
 
+.header-main {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
 .header h1 {
     color: var(--dark);
     font-size: 28px;
@@ -103,8 +110,23 @@ body {
 .header-controls {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 12px;
     flex-wrap: wrap;
+}
+
+.scope-control {
+    display: flex;
+    align-items: center;
+    min-width: 180px;
+    margin-left: 4px;
+}
+
+.scope-control .filter-select {
+    height: 38px;
+    min-height: 38px;
+    padding-top: 0;
+    padding-bottom: 0;
+    box-sizing: border-box;
 }
 
 .last-update {
@@ -114,7 +136,8 @@ body {
 
 /* Buttons */
 .btn {
-    padding: 10px 20px;
+    padding: 8px 18px;
+    min-height: 38px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
@@ -492,7 +515,8 @@ input:checked + .slider:before {
 }
 
 .search-input, .filter-select {
-    padding: 10px 15px;
+    padding: 8px 14px;
+    min-height: 38px;
     border: 2px solid var(--border);
     border-radius: 8px;
     font-size: 14px;
@@ -512,6 +536,42 @@ input:checked + .slider:before {
 .filter-select {
     background: white;
     cursor: pointer;
+}
+
+.top-users-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.top-user-card {
+    background: linear-gradient(135deg, rgba(52, 152, 219, 0.06) 0%, rgba(255, 255, 255, 1) 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+}
+
+.top-user-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--dark);
+    margin-bottom: 10px;
+}
+
+.top-user-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.top-user-metrics span {
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
 }
 
 /* Tables */
@@ -684,4 +744,3 @@ tbody td {
 .text-danger {
     color: var(--danger) !important;
 }
-
