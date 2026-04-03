@@ -78,25 +78,24 @@ module SlurmParser
           node[:gpu_alloc] = $1.to_i
         end
       end
-      node[:gpu_free] = node[:gpu_count] - node[:gpu_alloc]
-      
       # Extract features
       features = line[/AvailableFeatures=(\S+)/, 1]
       node[:features] = features ? features.split(',') : []
-      
-      # Calculate availability
-      node[:cpus_free] = node[:cpus_total] - node[:cpus_alloc]
-      node[:memory_free] = node[:memory_total] - node[:memory_alloc]
-      
+
       # Simplified state
       node[:status] = case node[:state]
+      when /DOWN/, /NOT_RESPONDING/, /FAIL/ then 'down'
+      when /DRAIN/, /DRAINING/ then 'draining'
       when /IDLE/ then 'idle'
       when /MIXED/ then 'mixed'
       when /ALLOCATED/, /ALLOC/ then 'allocated'
-      when /DOWN/ then 'down'
-      when /DRAIN/ then 'draining'
       else 'unknown'
       end
+
+      # Only schedulable nodes should contribute free capacity.
+      node[:cpus_free] = schedulable_node?(node) ? (node[:cpus_total] - node[:cpus_alloc]) : 0
+      node[:memory_free] = schedulable_node?(node) ? (node[:memory_total] - node[:memory_alloc]) : 0
+      node[:gpu_free] = schedulable_node?(node) ? (node[:gpu_count] - node[:gpu_alloc]) : 0
       
       nodes << node
     end

@@ -176,7 +176,7 @@ class ClusterDashboard {
 
             summary[type].total += node.gpu_count || 0;
 
-            if (node.status === 'down') {
+            if (node.status === 'down' || node.status === 'draining') {
                 summary[type].down += node.gpu_count || 0;
             } else {
                 summary[type].in_use += node.gpu_alloc || 0;
