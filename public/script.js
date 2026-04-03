@@ -152,12 +152,14 @@ class ClusterDashboard {
     }
 
     computeScopedStats(nodes, jobs) {
+        const schedulableNodes = nodes.filter((node) => ['idle', 'mixed', 'allocated'].includes(node.status));
+
         return {
             total_nodes: nodes.length,
             total_cpus: nodes.reduce((sum, node) => sum + (node.cpus_total || 0), 0),
-            available_cpus: nodes.reduce((sum, node) => sum + (node.cpus_free || 0), 0),
+            available_cpus: schedulableNodes.reduce((sum, node) => sum + (node.cpus_free || 0), 0),
             total_memory_mb: nodes.reduce((sum, node) => sum + (node.memory_total || 0), 0),
-            available_memory_mb: nodes.reduce((sum, node) => sum + (node.memory_free || 0), 0),
+            available_memory_mb: schedulableNodes.reduce((sum, node) => sum + (node.memory_free || 0), 0),
             total_jobs: jobs.length,
             running_jobs: jobs.filter((job) => job.state === 'R').length,
             pending_jobs: jobs.filter((job) => job.state === 'PD').length

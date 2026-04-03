@@ -2,6 +2,10 @@ require 'open3'
 require 'json'
 
 module SlurmParser
+  def self.schedulable_node?(node)
+    %w[idle mixed allocated].include?(node[:status])
+  end
+
   def self.parse_job_gpu_count(gpu_field)
     value = gpu_field.to_s.strip
     return 0 if value.empty? || value == 'N/A' || value == '(null)'
@@ -185,7 +189,7 @@ module SlurmParser
         in_use =  node[:gpu_alloc]
         by_type[type][:in_use] += in_use
         by_type[type][:available] += (count - in_use)
-      when 'down'
+      when 'down', 'draining'
         by_type[type][:down] += count
       end
     end
@@ -199,6 +203,7 @@ module SlurmParser
     
     partitions.each do |partition|
       partition_nodes = nodes.select { |n| n[:partitions].include?(partition[:name]) }
+      schedulable_nodes = partition_nodes.select { |n| schedulable_node?(n) }
       
       summary[partition[:name]] = {
         total_nodes: partition_nodes.count,
@@ -207,7 +212,7 @@ module SlurmParser
         allocated_nodes: partition_nodes.count { |n| n[:status] == 'allocated' },
         down_nodes: partition_nodes.count { |n| n[:status] == 'down' },
         total_cpus: partition_nodes.sum { |n| n[:cpus_total] },
-        available_cpus: partition_nodes.sum { |n| n[:cpus_free] },
+        available_cpus: schedulable_nodes.sum { |n| n[:cpus_free] },
         has_gpu: partition_nodes.any? { |n| n[:has_gpu] },
         time_limit: partition[:time_limit],
         is_default: partition[:is_default]
@@ -328,6 +333,7 @@ module SlurmParser
     partitions = parse_partitions
     all_jobs = parse_all_jobs  # Get all jobs for stats (all users)
     reservations = parse_reservations  # Get reservation info
+    schedulable_nodes = nodes.select { |node| schedulable_node?(node) }
 
     # Add reservation info to each node
     nodes.each do |node|
@@ -343,9 +349,9 @@ module SlurmParser
       stats: {
         total_nodes: nodes.count,
         total_cpus: nodes.sum { |n| n[:cpus_total] },
-        available_cpus: nodes.sum { |n| n[:cpus_free] },
+        available_cpus: schedulable_nodes.sum { |n| n[:cpus_free] },
         total_memory_mb: nodes.sum { |n| n[:memory_total] },
-        available_memory_mb: nodes.sum { |n| n[:memory_free] },
+        available_memory_mb: schedulable_nodes.sum { |n| n[:memory_free] },
         total_jobs: all_jobs.count,            # Count all jobs across all users
         running_jobs: all_jobs.count { |j| j[:state] == 'R' },  # Count running jobs from all users
         pending_jobs: all_jobs.count { |j| j[:state] == 'PD' }  # Count pending jobs from all users
