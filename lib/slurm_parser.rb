@@ -26,6 +26,31 @@ module SlurmParser
     end
   end
 
+  # Parse sinfo node-oriented output to determine which nodes should be visible
+  # in the dashboard. We use sinfo as the source of truth for node visibility,
+  # then enrich those nodes with scontrol hardware details.
+  def self.parse_visible_nodes
+    output = run_command('sinfo -N -h -o "%N|%P|%T"')
+    visible_nodes = {}
+
+    output.each_line do |line|
+      parts = line.strip.split('|', 3)
+      next if parts.length < 3
+
+      node_names = expand_node_list(parts[0])
+      partitions = parts[1].to_s.split(',').map { |partition| partition.delete('*') }.reject(&:empty?)
+      state = parts[2].to_s.strip
+
+      node_names.each do |node_name|
+        visible_nodes[node_name] ||= { partitions: [], states: [] }
+        visible_nodes[node_name][:partitions] |= partitions
+        visible_nodes[node_name][:states] << state unless state.empty?
+      end
+    end
+
+    visible_nodes
+  end
+
   # Execute a command and return stdout
   def self.run_command(cmd)
     stdout, stderr, status = Open3.capture3(cmd)
@@ -38,6 +63,7 @@ module SlurmParser
 
   # Parse scontrol show node --oneliner output
   def self.parse_nodes
+    visible_nodes = parse_visible_nodes
     output = run_command('scontrol show node --oneliner')
     nodes = []
     
@@ -46,12 +72,14 @@ module SlurmParser
       
       # Extract key fields using regex
       node[:name] = line[/NodeName=(\S+)/, 1]
+      next unless visible_nodes.key?(node[:name])
+
       node[:state] = line[/State=(\S+)/, 1]
       node[:cpus_total] = line[/CPUTot=(\d+)/, 1].to_i
       node[:cpus_alloc] = line[/CPUAlloc=(\d+)/, 1].to_i
       node[:memory_total] = line[/RealMemory=(\d+)/, 1].to_i
       node[:memory_alloc] = line[/AllocMem=(\d+)/, 1].to_i
-      node[:partitions] = line[/Partitions=(\S+)/, 1]&.split(',') || []
+      node[:partitions] = visible_nodes[node[:name]][:partitions]
       
       # Extract GPU information from Gres field
       gres = line[/Gres=(\S+)/, 1]
