@@ -160,6 +160,8 @@ class ClusterDashboard {
             available_cpus: schedulableNodes.reduce((sum, node) => sum + (node.cpus_free || 0), 0),
             total_memory_mb: nodes.reduce((sum, node) => sum + (node.memory_total || 0), 0),
             available_memory_mb: schedulableNodes.reduce((sum, node) => sum + (node.memory_free || 0), 0),
+            total_gpus: nodes.reduce((sum, node) => sum + (node.gpu_count || 0), 0),
+            available_gpus: schedulableNodes.reduce((sum, node) => sum + (node.gpu_free || 0), 0),
             total_jobs: jobs.length,
             running_jobs: jobs.filter((job) => job.state === 'R').length,
             pending_jobs: jobs.filter((job) => job.state === 'PD').length
@@ -215,10 +217,23 @@ class ClusterDashboard {
         document.getElementById('stat-available-cpus').textContent = stats.available_cpus;
         document.getElementById('stat-total-cpus').textContent = `of ${stats.total_cpus} total`;
 
-        const availMemGB = Math.round((stats.available_memory_mb || 0) / 1024);
-        const totalMemGB = Math.round((stats.total_memory_mb || 0) / 1024);
-        document.getElementById('stat-available-memory').textContent = `${availMemGB} GB`;
-        document.getElementById('stat-total-memory').textContent = `of ${totalMemGB} GB total`;
+        const availMemGB = (stats.available_memory_mb || 0) / 1024;
+        const totalMemGB = (stats.total_memory_mb || 0) / 1024;
+        const formatMem = (gb) => gb >= 1024
+            ? `${(gb / 1024).toFixed(1)} TB`
+            : `${Math.round(gb)} GB`;
+        document.getElementById('stat-available-memory').textContent = formatMem(availMemGB);
+        document.getElementById('stat-total-memory').textContent = `of ${formatMem(totalMemGB)} total`;
+
+        const totalGpus = stats.total_gpus || 0;
+        const gpusCard = document.getElementById('stat-gpus-card');
+        if (totalGpus > 0) {
+            gpusCard.classList.remove('hidden');
+            document.getElementById('stat-available-gpus').textContent = stats.available_gpus || 0;
+            document.getElementById('stat-total-gpus').textContent = `of ${totalGpus} total`;
+        } else {
+            gpusCard.classList.add('hidden');
+        }
 
         document.getElementById('stat-running-jobs').textContent = stats.running_jobs;
         document.getElementById('stat-total-jobs').textContent = `${stats.total_jobs} total jobs`;
@@ -233,7 +248,16 @@ class ClusterDashboard {
             return;
         }
 
-        const colors = ['#667eea', '#f093fb', '#4facfe', '#43e97b', '#fa709a'];
+        const gradients = [
+            ['#667eea', '#764ba2'],
+            ['#f093fb', '#f5576c'],
+            ['#0083B0', '#00B4DB'],
+            ['#11998e', '#38ef7d'],
+            ['#fa709a', '#fee140'],
+            ['#30cfd0', '#330867'],
+            ['#a18cd1', '#fbc2eb'],
+            ['#ff9a9e', '#fad0c4'],
+        ];
         let colorIndex = 0;
 
         container.innerHTML = Object.entries(gpuSummary).map(([type, stats]) => {
@@ -243,38 +267,28 @@ class ClusterDashboard {
             const down = stats.down;
             const usagePercent = total > 0 ? Math.round((inUse / total) * 100) : 0;
 
-            const color1 = colors[colorIndex % colors.length];
-            const color2 = colors[(colorIndex + 1) % colors.length];
+            const [color1, color2] = gradients[colorIndex % gradients.length];
             colorIndex++;
 
             return `
-                <div class="gpu-card" style="background: linear-gradient(135deg, ${color1} 0%, ${color2} 100%);">
+                <div class="gpu-card" style="background: linear-gradient(135deg, ${color1} 0%, ${color2} 100%);" title="${type.toUpperCase()} — ${available} of ${total} GPUs available${down > 0 ? `, ${down} down` : ''}">
                     <div class="gpu-card-header">
                         <div class="gpu-type">${type.toUpperCase()}</div>
                         <div class="gpu-icon"><i class="fas fa-microchip"></i></div>
                     </div>
-                    <div class="gpu-stats">
-                        <div class="gpu-stat">
-                            <span class="gpu-stat-label">Total GPUs</span>
-                            <span class="gpu-stat-value">${total}</span>
-                        </div>
-                        <div class="gpu-stat">
-                            <span class="gpu-stat-label">Available</span>
-                            <span class="gpu-stat-value">${available}</span>
-                        </div>
-                        ${down > 0 ? `
-                        <div class="gpu-stat">
-                            <span class="gpu-stat-label">Down</span>
-                            <span class="gpu-stat-value">${down}</span>
-                        </div>
-                        ` : ''}
-                        <div class="gpu-stat">
-                            <span class="gpu-stat-label">In Use</span>
-                            <span class="gpu-stat-value">${inUse}</span>
-                        </div>
+                    <div class="gpu-main">
+                        <span class="gpu-main-value">${available}</span>
+                        <span class="gpu-main-total">/ ${total}</span>
                     </div>
+                    <div class="gpu-main-label">Available</div>
                     <div class="gpu-progress">
                         <div class="gpu-progress-bar" style="width: ${usagePercent}%"></div>
+                    </div>
+                    <div class="gpu-meta">
+                        <span class="gpu-meta-item"><strong>${inUse}</strong> in use · ${usagePercent}%</span>
+                        ${down > 0
+                            ? `<span class="gpu-meta-item gpu-meta-down"><i class="fas fa-circle-exclamation"></i> <strong>${down}</strong> down</span>`
+                            : ''}
                     </div>
                 </div>
             `;
@@ -291,34 +305,39 @@ class ClusterDashboard {
             return;
         }
 
-        container.innerHTML = entries.map(([name, info]) => `
-            <div class="partition-card ${info.is_default ? 'default' : ''}">
-                <div class="partition-header">
-                    <div class="partition-name">${name}</div>
-                    ${info.is_default ? '<div class="partition-badge">Default</div>' : ''}
-                    ${info.has_gpu ? '<i class="fas fa-microchip" style="color: var(--info);"></i>' : ''}
+        container.innerHTML = entries.map(([name, info]) => {
+            const totalCpus = info.total_cpus || 0;
+            const availCpus = info.available_cpus || 0;
+            const usedCpus = Math.max(totalCpus - availCpus, 0);
+            const usagePercent = totalCpus > 0 ? Math.round((usedCpus / totalCpus) * 100) : 0;
+            const classes = ['partition-card'];
+            if (info.is_default) classes.push('default');
+            if (info.has_gpu) classes.push('has-gpu');
+
+            return `
+                <div class="${classes.join(' ')}" title="${name} — ${availCpus} of ${totalCpus} CPUs available">
+                    <div class="partition-header">
+                        <div class="partition-name">${name}</div>
+                        <div class="partition-tags">
+                            ${info.is_default ? '<span class="partition-badge">Default</span>' : ''}
+                            ${info.has_gpu ? '<span class="partition-icon" title="GPU partition"><i class="fas fa-microchip"></i></span>' : ''}
+                        </div>
+                    </div>
+                    <div class="partition-main">
+                        <span class="partition-main-value">${availCpus}</span>
+                        <span class="partition-main-total">/ ${totalCpus}</span>
+                    </div>
+                    <div class="partition-main-label">CPUs Available</div>
+                    <div class="partition-progress">
+                        <div class="partition-progress-bar" style="width: ${usagePercent}%"></div>
+                    </div>
+                    <div class="partition-meta">
+                        <span class="partition-meta-item"><i class="fas fa-server"></i> <strong>${info.idle_nodes}</strong>/${info.total_nodes} idle</span>
+                        <span class="partition-meta-item"><i class="far fa-clock"></i> ${info.time_limit}</span>
+                    </div>
                 </div>
-                <div class="partition-info">
-                    <div class="partition-stat">
-                        <div class="partition-stat-label">Total Nodes</div>
-                        <div class="partition-stat-value">${info.total_nodes}</div>
-                    </div>
-                    <div class="partition-stat">
-                        <div class="partition-stat-label">Idle</div>
-                        <div class="partition-stat-value text-success">${info.idle_nodes}</div>
-                    </div>
-                    <div class="partition-stat">
-                        <div class="partition-stat-label">Available CPUs</div>
-                        <div class="partition-stat-value">${info.available_cpus}</div>
-                        <div class="partition-stat-subtext">of ${info.total_cpus} total</div>
-                    </div>
-                    <div class="partition-stat">
-                        <div class="partition-stat-label">Time Limit</div>
-                        <div class="partition-stat-value">${info.time_limit}</div>
-                    </div>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     updateTopUsers(topUsers, scopeName) {
@@ -361,6 +380,7 @@ class ClusterDashboard {
                 const partitionsStr = (node.partitions || []).join(',').toLowerCase();
                 if (!node.name.toLowerCase().includes(searchLower) &&
                     !node.status.toLowerCase().includes(searchLower) &&
+                    !(node.cpu_type && node.cpu_type.toLowerCase().includes(searchLower)) &&
                     !(node.gpu_type && node.gpu_type.toLowerCase().includes(searchLower)) &&
                     !partitionsStr.includes(searchLower)) {
                     return false;
@@ -402,14 +422,17 @@ class ClusterDashboard {
         }
 
         if (filteredNodes.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fas fa-search"></i><p>No nodes found</p></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><i class="fas fa-search"></i><p>No nodes found</p></td></tr>';
             return;
         }
+
+        const formatCpuType = (t) => t ? t.charAt(0).toUpperCase() + t.slice(1) : '-';
 
         tbody.innerHTML = filteredNodes.map(node => `
             <tr>
                 <td><strong>${node.name}</strong></td>
                 <td><span class="status-badge status-${node.status}">${node.status}</span></td>
+                <td>${formatCpuType(node.cpu_type)}</td>
                 <td>${node.cpus_free} / ${node.cpus_total}</td>
                 <td>${Math.round(node.memory_free / 1024)} GB / ${Math.round(node.memory_total / 1024)} GB</td>
                 <td>${node.gpu_type ? node.gpu_type.toUpperCase() : '-'}</td>

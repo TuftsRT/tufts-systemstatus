@@ -283,7 +283,8 @@ input:checked + .slider:before {
     box-shadow: var(--shadow);
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
+    min-width: 0;
     transition: all 0.3s ease;
 }
 
@@ -293,39 +294,49 @@ input:checked + .slider:before {
 }
 
 .stat-icon {
-    width: 60px;
-    height: 60px;
+    width: 52px;
+    height: 52px;
     border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 24px;
+    font-size: 22px;
+    flex-shrink: 0;
 }
 
 .stat-content {
     flex: 1;
+    min-width: 0;
 }
 
 .stat-label {
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .stat-value {
     color: var(--text-primary);
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 700;
-    line-height: 1.2;
-    margin: 5px 0;
+    line-height: 1.15;
+    margin: 4px 0;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .stat-subtext {
     color: var(--text-secondary);
     font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Section */
@@ -349,21 +360,31 @@ input:checked + .slider:before {
 /* GPU Grid */
 .gpu-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
 }
 
 .gpu-card {
+    position: relative;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: 10px;
+    padding: 14px 16px 12px;
     box-shadow: var(--shadow);
-    transition: all 0.3s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+}
+
+.gpu-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.18), transparent 60%);
+    pointer-events: none;
 }
 
 .gpu-card:hover {
-    transform: translateY(-5px);
+    transform: translateY(-3px);
     box-shadow: var(--shadow-hover);
 }
 
@@ -371,139 +392,276 @@ input:checked + .slider:before {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
+    position: relative;
 }
 
 .gpu-type {
-    font-size: 24px;
+    font-size: 14px;
     font-weight: 700;
     text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .gpu-icon {
-    font-size: 32px;
-    opacity: 0.8;
+    font-size: 16px;
+    opacity: 0.85;
+    flex-shrink: 0;
+    margin-left: 8px;
 }
 
-.gpu-stats {
+.gpu-main {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    align-items: baseline;
+    gap: 4px;
+    margin-bottom: 2px;
+    position: relative;
 }
 
-.gpu-stat {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+.gpu-main-value {
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.5px;
+    color: white;
 }
 
-.gpu-stat:last-child {
-    border-bottom: none;
-}
-
-.gpu-stat-label {
+.gpu-main-total {
     font-size: 14px;
-    opacity: 0.9;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
 }
 
-.gpu-stat-value {
-    font-size: 18px;
-    font-weight: 700;
+.gpu-main-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: rgba(255, 255, 255, 0.85);
+    margin-bottom: 10px;
+    position: relative;
 }
 
 .gpu-progress {
     width: 100%;
-    height: 8px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
     overflow: hidden;
-    margin-top: 10px;
+    position: relative;
 }
 
 .gpu-progress-bar {
     height: 100%;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 999px;
     transition: width 0.5s ease;
+}
+
+.gpu-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.9);
+    position: relative;
+}
+
+.gpu-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.gpu-meta-item strong {
+    font-weight: 700;
+    color: white;
+}
+
+.gpu-meta-down {
+    color: #ffe2e2 !important;
+}
+
+.gpu-meta-down strong {
+    color: white;
 }
 
 /* Partition Grid */
 .partition-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
 }
 
 .partition-card {
+    --accent: var(--primary);
+    --accent-soft: rgba(52, 152, 219, 0.10);
+    position: relative;
     background: var(--bg-card);
-    border: 2px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    transition: all 0.3s ease;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    overflow: hidden;
+}
+
+.partition-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--accent);
 }
 
 .partition-card:hover {
-    border-color: var(--primary);
+    transform: translateY(-2px);
     box-shadow: var(--shadow-hover);
+    border-color: var(--accent);
 }
 
 .partition-card.default {
-    border-color: var(--success);
-    background: linear-gradient(135deg, rgba(46, 204, 113, 0.05) 0%, rgba(46, 204, 113, 0.02) 100%);
+    --accent: #2ecc71;
+    --accent-soft: rgba(46, 204, 113, 0.10);
+}
+
+.partition-card.has-gpu {
+    --accent: #9b59b6;
+    --accent-soft: rgba(155, 89, 182, 0.10);
+}
+
+.partition-card.default.has-gpu {
+    --accent: #2ecc71;
+    --accent-soft: rgba(46, 204, 113, 0.10);
 }
 
 .partition-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 15px;
+    gap: 6px;
+    margin-bottom: 12px;
 }
 
 .partition-name {
-    font-size: 20px;
+    font-size: 13px;
     font-weight: 700;
-    color: var(--dark);
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.partition-tags {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
 }
 
 .partition-badge {
-    background: var(--success);
+    background: var(--accent);
     color: white;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.partition-info {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-}
-
-.partition-stat {
-    display: flex;
-    flex-direction: column;
-}
-
-.partition-stat-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-bottom: 4px;
-}
-
-.partition-stat-value {
-    font-size: 18px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 9px;
     font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.partition-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+}
+
+.partition-main {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-bottom: 2px;
+}
+
+.partition-main-value {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+}
+
+.partition-main-total {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.partition-main-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.partition-progress {
+    width: 100%;
+    height: 5px;
+    background: var(--bg-primary);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.partition-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 0.5s ease;
+}
+
+.partition-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    gap: 6px;
+}
+
+.partition-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.partition-meta-item strong {
+    font-weight: 600;
     color: var(--text-primary);
 }
 
-.partition-stat-subtext {
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-top: 2px;
+.partition-meta-item i {
+    font-size: 10px;
+    opacity: 0.7;
 }
 
 /* Table Controls */
@@ -700,23 +858,39 @@ tbody td {
 }
 
 /* Responsive Design */
+@media (max-width: 1200px) {
+    .gpu-grid,
+    .partition-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 992px) {
+    .gpu-grid,
+    .partition-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
 @media (max-width: 768px) {
     .header {
         flex-direction: column;
         align-items: flex-start;
     }
-    
+
     .header-controls {
         width: 100%;
         justify-content: space-between;
     }
-    
+
     .stats-grid {
         grid-template-columns: 1fr;
     }
-    
-    .gpu-grid, .partition-grid {
-        grid-template-columns: 1fr;
+
+    .gpu-grid,
+    .partition-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
     }
     
     .table-wrapper {
