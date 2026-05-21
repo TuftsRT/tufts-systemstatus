@@ -1,5 +1,50 @@
 // Cluster Monitor Dashboard - Main JavaScript
 
+// Map of raw CPU microarchitecture tokens (as they appear in Slurm
+// AvailableFeatures) to human-readable display names. Add new entries
+// here when a new node type is onboarded.
+const CPU_TYPE_DISPLAY = {
+    // Intel
+    nehalem: 'Nehalem',
+    westmere: 'Westmere',
+    sandybridge: 'Sandy Bridge',
+    ivybridge: 'Ivy Bridge',
+    haswell: 'Haswell',
+    broadwell: 'Broadwell',
+    skylake: 'Skylake',
+    cascadelake: 'Cascade Lake',
+    cooperlake: 'Cooper Lake',
+    icelake: 'Ice Lake',
+    sapphirerapids: 'Sapphire Rapids',
+    emeraldrapids: 'Emerald Rapids',
+    graniterapids: 'Granite Rapids',
+    sierraforest: 'Sierra Forest',
+    clearwaterforest: 'Clearwater Forest',
+    // AMD
+    bulldozer: 'Bulldozer',
+    piledriver: 'Piledriver',
+    steamroller: 'Steamroller',
+    excavator: 'Excavator',
+    zen: 'Zen',
+    zen2: 'Zen 2',
+    zen3: 'Zen 3',
+    zen4: 'Zen 4',
+    zen5: 'Zen 5',
+    naples: 'Naples',
+    rome: 'Rome',
+    milan: 'Milan',
+    genoa: 'Genoa',
+    bergamo: 'Bergamo',
+    turin: 'Turin',
+    // ARM
+    neoverse: 'Neoverse',
+    graviton: 'Graviton',
+    ampere: 'Ampere',
+    // Architecture fallbacks (from scontrol Arch=...)
+    x86_64: 'x86-64',
+    aarch64: 'ARM64',
+};
+
 class ClusterDashboard {
     constructor() {
         this.autoRefreshInterval = null;
@@ -426,7 +471,13 @@ class ClusterDashboard {
             return;
         }
 
-        const formatCpuType = (t) => t ? t.charAt(0).toUpperCase() + t.slice(1) : '-';
+        const formatCpuType = (t) => {
+            if (!t) return '-';
+            const pretty = CPU_TYPE_DISPLAY[t.toLowerCase()];
+            if (pretty) return pretty;
+            // Fallback: capitalize first letter for unknown codenames
+            return t.charAt(0).toUpperCase() + t.slice(1);
+        };
 
         tbody.innerHTML = filteredNodes.map(node => `
             <tr>

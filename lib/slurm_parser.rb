@@ -6,8 +6,9 @@ module SlurmParser
   # Used to recognize the CPU type without hardcoding per-node mappings.
   CPU_MICROARCH_FEATURES = %w[
     nehalem westmere sandybridge ivybridge haswell broadwell
-    skylake cascadelake cooperlake icelake sapphirerapids emeraldrapids
-    granitelake sierraforest
+    skylake cascadelake cooperlake icelake
+    sapphirerapids emeraldrapids graniterapids
+    sierraforest clearwaterforest
     bulldozer piledriver steamroller excavator
     zen zen2 zen3 zen4 zen5
     naples rome milan genoa bergamo turin
