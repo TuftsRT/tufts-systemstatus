@@ -293,16 +293,7 @@ class ClusterDashboard {
             return;
         }
 
-        const gradients = [
-            ['#667eea', '#764ba2'],
-            ['#f093fb', '#f5576c'],
-            ['#0083B0', '#00B4DB'],
-            ['#11998e', '#38ef7d'],
-            ['#fa709a', '#fee140'],
-            ['#30cfd0', '#330867'],
-            ['#a18cd1', '#fbc2eb'],
-            ['#ff9a9e', '#fad0c4'],
-        ];
+        const colors = ['#667eea', '#f093fb', '#4facfe', '#43e97b', '#fa709a'];
         let colorIndex = 0;
 
         container.innerHTML = Object.entries(gpuSummary).map(([type, stats]) => {
@@ -312,7 +303,8 @@ class ClusterDashboard {
             const down = stats.down;
             const usagePercent = total > 0 ? Math.round((inUse / total) * 100) : 0;
 
-            const [color1, color2] = gradients[colorIndex % gradients.length];
+            const color1 = colors[colorIndex % colors.length];
+            const color2 = colors[(colorIndex + 1) % colors.length];
             colorIndex++;
 
             return `
@@ -355,17 +347,14 @@ class ClusterDashboard {
             const availCpus = info.available_cpus || 0;
             const usedCpus = Math.max(totalCpus - availCpus, 0);
             const usagePercent = totalCpus > 0 ? Math.round((usedCpus / totalCpus) * 100) : 0;
-            const classes = ['partition-card'];
-            if (info.is_default) classes.push('default');
-            if (info.has_gpu) classes.push('has-gpu');
 
             return `
-                <div class="${classes.join(' ')}" title="${name} — ${availCpus} of ${totalCpus} CPUs available">
+                <div class="partition-card ${info.is_default ? 'default' : ''}" title="${name} — ${availCpus} of ${totalCpus} CPUs available">
                     <div class="partition-header">
                         <div class="partition-name">${name}</div>
                         <div class="partition-tags">
                             ${info.is_default ? '<span class="partition-badge">Default</span>' : ''}
-                            ${info.has_gpu ? '<span class="partition-icon" title="GPU partition"><i class="fas fa-microchip"></i></span>' : ''}
+                            ${info.has_gpu ? '<i class="fas fa-microchip partition-gpu-icon" title="GPU partition"></i>' : ''}
                         </div>
                     </div>
                     <div class="partition-main">
