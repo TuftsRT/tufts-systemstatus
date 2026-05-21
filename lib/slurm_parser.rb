@@ -2,8 +2,55 @@ require 'open3'
 require 'json'
 
 module SlurmParser
+  # Known CPU microarchitecture tags commonly added to Slurm node features.
+  # Used to recognize the CPU type without hardcoding per-node mappings.
+  CPU_MICROARCH_FEATURES = %w[
+    nehalem westmere sandybridge ivybridge haswell broadwell
+    skylake cascadelake cooperlake icelake
+    sapphirerapids emeraldrapids graniterapids
+    sierraforest clearwaterforest
+    bulldozer piledriver steamroller excavator
+    zen zen2 zen3 zen4 zen5
+    naples rome milan genoa bergamo turin
+    neoverse graviton ampere
+  ].freeze
+
   def self.schedulable_node?(node)
     %w[idle mixed allocated].include?(node[:status])
+  end
+
+  # Detect a node's CPU type. Prefers a feature token that matches a known CPU
+  # microarchitecture (e.g. "icelake", "zen3"); falls back to the Arch value
+  # (e.g. "x86_64") so something useful is always returned.
+  def self.detect_cpu_type(features, arch)
+    if features && !features.empty?
+      match = features.find { |f| CPU_MICROARCH_FEATURES.include?(f.to_s.downcase) }
+      return match if match
+    end
+    arch
+  end
+
+  # Refine a base GPU type (from Gres, e.g. "a100") into a more specific variant
+  # by inspecting AvailableFeatures (e.g. "a100-80G"). Slurm sites typically tag
+  # memory size or other distinguishing attributes as a feature shaped like
+  # "<base>-<suffix>" or "<base>_<suffix>". We pick the most informative match:
+  # one whose suffix contains a memory size (e.g. 80G, 40GB) wins over a plain
+  # variant tag. If nothing matches, the base type is returned unchanged.
+  def self.refine_gpu_type(base_type, features)
+    return base_type if base_type.nil? || features.nil? || features.empty?
+
+    base = base_type.to_s.downcase
+    variant_re = /\A#{Regexp.escape(base)}[-_]\S+\z/i
+
+    variants = features.select do |feature|
+      f = feature.to_s
+      f.downcase != base && f =~ variant_re
+    end
+
+    return base_type if variants.empty?
+
+    with_memory = variants.find { |v| v =~ /\d+\s*gb?\z/i }
+    with_memory || variants.first
   end
 
   def self.parse_job_gpu_count(gpu_field)
@@ -109,6 +156,17 @@ module SlurmParser
       # Extract features
       features = line[/AvailableFeatures=(\S+)/, 1]
       node[:features] = features ? features.split(',') : []
+
+      # Refine GPU type using features: e.g. base "a100" + feature "a100-80G" → "a100-80G".
+      # This automatically splits same-model GPUs that differ by memory size (or any
+      # other variant tag) into distinct types without hardcoding a list.
+      if node[:has_gpu]
+        node[:gpu_type] = refine_gpu_type(node[:gpu_type], node[:features])
+      end
+
+      # Detect CPU microarchitecture from features (e.g. "icelake"), falling
+      # back to Arch (e.g. "x86_64") when no microarch tag is present.
+      node[:cpu_type] = detect_cpu_type(node[:features], line[/Arch=(\S+)/, 1])
 
       # Simplified state
       node[:status] = case node[:state]
@@ -379,6 +437,8 @@ module SlurmParser
         available_cpus: schedulable_nodes.sum { |n| n[:cpus_free] },
         total_memory_mb: nodes.sum { |n| n[:memory_total] },
         available_memory_mb: schedulable_nodes.sum { |n| n[:memory_free] },
+        total_gpus: nodes.sum { |n| n[:gpu_count] || 0 },
+        available_gpus: schedulable_nodes.sum { |n| n[:gpu_free] || 0 },
         total_jobs: all_jobs.count,            # Count all jobs across all users
         running_jobs: all_jobs.count { |j| j[:state] == 'R' },  # Count running jobs from all users
         pending_jobs: all_jobs.count { |j| j[:state] == 'PD' }  # Count pending jobs from all users
