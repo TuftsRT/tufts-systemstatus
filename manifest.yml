@@ -2,5 +2,5 @@
 name: System Status
 description: Real-time cluster status dashboard showing GPU availability, partitions, and node information
 icon: fa://server
-category: Clusters
+category: ""
 new_window: false

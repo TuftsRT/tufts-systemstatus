@@ -102,9 +102,15 @@ module SlurmParser
   def self.run_command(cmd)
     stdout, stderr, status = Open3.capture3(cmd)
     return stdout if status.success?
-    raise "Command failed: #{cmd}\n#{stderr}"
+
+    # Log to STDERR so failures surface in the server logs. We still return the
+    # (possibly empty) stdout instead of raising so one failing command does not
+    # blank out the entire dashboard.
+    STDERR.puts "[SlurmParser] Command failed (exit #{status.exitstatus}): #{cmd}"
+    STDERR.puts "[SlurmParser] STDERR: #{stderr}" unless stderr.to_s.empty?
+    stdout
   rescue => e
-    puts "Error executing command: #{e.message}"
+    STDERR.puts "[SlurmParser] Exception executing command: #{cmd.inspect} — #{e.message}"
     ""
   end
 
@@ -226,16 +232,24 @@ module SlurmParser
   # Parse squeue output for ALL jobs (all users)
   # Used for overall cluster statistics
   def self.parse_all_jobs
-    output = run_command('squeue -o "%i %j %u %t %M %D %C %b %P %N"')
+    # Use '|' as the field delimiter and -h to drop the header. Whitespace
+    # splitting breaks on job names (%j) that contain spaces, shifting every
+    # subsequent column; a pipe delimiter keeps the fixed columns aligned.
+    output = run_command('squeue -h -o "%i|%j|%u|%t|%M|%D|%C|%b|%P|%N"')
     jobs = []
-    
-    output.each_line.drop(1).each do |line| # Skip header
-      parts = line.strip.split(/\s+/, 10)
-      next if parts.length < 9
-      
+
+    output.each_line do |line|
+      # Job names (%j) may themselves contain '|', so keep the fixed columns
+      # from the right and rebuild the name from whatever is left in the middle.
+      raw = line.chomp.split('|', -1)
+      next if raw.length < 10
+
+      trailing = raw.last(8) # user, state, time, nodes, cpus, gres, partition, nodelist
+      parts = [raw[0], raw[1...(raw.length - 8)].join('|'), *trailing]
+
       gpu_tres = parts[7] || ''
       gpus = parse_job_gpu_count(gpu_tres)
-      
+
       job = {
         job_id: parts[0],
         name: parts[1],
@@ -248,7 +262,7 @@ module SlurmParser
         partition: parts[8],
         node_list: parts[9] || ''
       }
-      
+
       jobs << job
     end
     
