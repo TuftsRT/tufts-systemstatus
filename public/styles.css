@@ -817,6 +817,523 @@ tbody td {
     color: var(--danger);
 }
 
+/* ------------------------------------------------------------------ */
+/* GPU drill-down: clickable cards + filter panel                      */
+/* ------------------------------------------------------------------ */
+
+.section-hint {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: none;
+    letter-spacing: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.section-hint i {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.clickable-card {
+    cursor: pointer;
+    user-select: none;
+}
+
+.clickable-card:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* GPU cards */
+.gpu-card.clickable-card:active,
+.partition-card.clickable-card:active {
+    transform: translateY(-1px);
+}
+
+.gpu-card-action {
+    position: relative;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.25);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: rgba(255, 255, 255, 0.92);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.85;
+    transition: opacity 0.2s ease;
+}
+
+.gpu-card.clickable-card:hover .gpu-card-action,
+.gpu-card.selected .gpu-card-action {
+    opacity: 1;
+}
+
+.gpu-card.selected {
+    box-shadow: 0 0 0 3px var(--dark), var(--shadow-hover);
+    transform: translateY(-3px);
+}
+
+/* Partition cards */
+.partition-card-action {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.2s ease;
+}
+
+.partition-card.clickable-card:hover .partition-card-action,
+.partition-card.selected .partition-card-action {
+    color: var(--primary);
+}
+
+.partition-card.selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.25), var(--shadow-hover);
+    transform: translateY(-3px);
+}
+
+.partition-card.selected .partition-card-action {
+    color: var(--primary);
+}
+
+.partition-selected-icon {
+    color: var(--primary);
+    font-size: 12px;
+}
+
+/* Removable filter chip inside the drill-down panel */
+.drilldown-chip-clear {
+    background: rgba(255, 255, 255, 0.22);
+    border: none;
+    border-radius: 999px;
+    color: #fff;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    margin-left: 4px;
+    font-size: 10px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.drilldown-chip-clear:hover,
+.drilldown-chip-clear:focus-visible {
+    background: var(--danger);
+    color: #fff;
+    outline: none;
+}
+
+/* Selected "Available GPUs" stat card */
+.stat-card.clickable-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card.clickable-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+}
+
+.stat-card.selected {
+    box-shadow: 0 0 0 3px var(--warning), var(--shadow-hover);
+}
+
+/* Filter panel above the node table */
+.drilldown-panel {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(52, 152, 219, 0.06) 0%, #ffffff 60%);
+    padding: 14px 16px;
+    margin-bottom: 18px;
+}
+
+.drilldown-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.drilldown-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.drilldown-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--dark);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 5px 11px;
+    border-radius: 999px;
+}
+
+.drilldown-summary {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.drilldown-summary strong {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.drilldown-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.drilldown-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.drilldown-toggle input {
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--primary);
+}
+
+.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-ghost:hover {
+    background: var(--dark);
+    border-color: var(--dark);
+    color: #fff;
+}
+
+.btn-ghost.copied {
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+}
+
+/* Filled "Clear filter" button — the way back to the full overview, so it has
+   to read as an action rather than blend into the panel. */
+.btn-clear {
+    background: var(--primary);
+    border: 1px solid var(--primary);
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 1px 4px rgba(52, 152, 219, 0.35);
+    transition: all 0.2s ease;
+}
+
+.btn-clear:hover {
+    background: #2980b9;
+    border-color: #2980b9;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.45);
+    transform: translateY(-1px);
+}
+
+.btn-clear:focus-visible {
+    outline: 2px solid var(--dark);
+    outline-offset: 2px;
+}
+
+/* Node chips */
+.node-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.node-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.node-chip:hover,
+.node-chip:focus-visible {
+    border-color: var(--primary);
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.node-chip-name {
+    font-weight: 700;
+}
+
+.node-chip-count {
+    background: rgba(46, 204, 113, 0.14);
+    color: #1e8449;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 999px;
+}
+
+.node-chip-reserved {
+    border-style: dashed;
+}
+
+.node-chip-reserved .fa-lock {
+    font-size: 10px;
+    color: var(--warning);
+}
+
+.drilldown-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.drilldown-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.drilldown-warn {
+    color: #b9770e;
+}
+
+.drilldown-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.drilldown-hints {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+}
+
+.drilldown-hints-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.drilldown-hints-label i {
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.drilldown-hint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.drilldown-hint + .drilldown-hint {
+    margin-top: 8px;
+}
+
+/* One example command per requestable resource: a CPU-only tag plus one per GPU model. */
+.hint-tag {
+    flex-shrink: 0;
+    min-width: 78px;
+    text-align: center;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.hint-detail {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.drilldown-extra {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+}
+
+/* Callout explaining lab-owned partitions. Deliberately smaller and quieter than
+   the commands above it — it is guidance, not a command to copy. */
+.drilldown-hints-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin-top: 14px;
+    padding: 10px 13px;
+    background: rgba(52, 152, 219, 0.07);
+    border: 1px solid rgba(52, 152, 219, 0.22);
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    letter-spacing: 0.05px;
+}
+
+.drilldown-hints-note i {
+    flex-shrink: 0;
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--primary);
+}
+
+.drilldown-hints-note strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Partition flags read as commands, so set them in the mono face. */
+.drilldown-hints-note code {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(44, 62, 80, 0.08);
+    color: var(--text-primary);
+    padding: 1px 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.drilldown-hint code {
+    flex: 1;
+    min-width: 240px;
+    background: var(--dark);
+    color: #e8f6ff;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 12.5px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+/* Node table GPU emphasis */
+tbody tr.row-gpu-available {
+    background: rgba(46, 204, 113, 0.06);
+}
+
+.gpu-count {
+    font-weight: 600;
+}
+
+.gpu-count-free {
+    color: #1e8449;
+}
+
+.gpu-count-busy {
+    color: var(--text-secondary);
+}
+
+.node-reserved-icon {
+    font-size: 10px;
+    color: var(--warning);
+    margin-left: 6px;
+}
+
+tbody tr.row-flash {
+    animation: row-flash 2s ease;
+}
+
+@keyframes row-flash {
+    0%, 40% { background: rgba(52, 152, 219, 0.28); }
+    100% { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .gpu-card.clickable-card,
+    .stat-card.clickable-card,
+    .node-chip {
+        transition: none;
+    }
+
+    tbody tr.row-flash {
+        animation: none;
+        outline: 2px solid var(--primary);
+    }
+}
+
 /* Empty State */
 .empty-state {
     text-align: center;

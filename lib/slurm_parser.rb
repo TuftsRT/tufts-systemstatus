@@ -53,6 +53,36 @@ module SlurmParser
     with_memory || variants.first
   end
 
+  # Extract the gpu entry from a GRES-style field such as Gres= or GresUsed=.
+  # Handles every spelling Slurm emits:
+  #   gpu:4                  -> [nil, 4]       (no model configured)
+  #   gpu:a100:4             -> ["a100", 4]
+  #   gpu:a100:4(IDX:0-3)    -> ["a100", 4]
+  #   gpu:2080ti:4           -> ["2080ti", 4]  (model starting with a digit)
+  #   shard:8,gpu:a100:2     -> ["a100", 2]
+  # Splitting on ':' rather than pattern-matching avoids mistaking a numeric
+  # model name for the count (a regex like /gpu:(\d+)/ reads "gpu:2080ti:4" as
+  # 2080 GPUs).
+  # Returns nil when the field holds no gpu entry.
+  def self.parse_gres_gpu(value)
+    text = value.to_s
+    return nil if text.empty? || text == '(null)'
+
+    text.split(',').each do |token|
+      entry = token.strip
+      next unless entry.start_with?('gpu:')
+
+      # Drop any trailing "(IDX:0-3)" / "(S:0-1)" detail.
+      entry = entry.sub(/\(.*\z/, '')
+      parts = entry.split(':')
+
+      return [parts[1], parts[2].to_i] if parts.length >= 3
+      return [nil, parts[1].to_i] if parts.length == 2
+    end
+
+    nil
+  end
+
   def self.parse_job_gpu_count(gpu_field)
     value = gpu_field.to_s.strip
     return 0 if value.empty? || value == 'N/A' || value == '(null)'
@@ -134,30 +164,54 @@ module SlurmParser
       node[:memory_alloc] = line[/AllocMem=(\d+)/, 1].to_i
       node[:partitions] = visible_nodes[node[:name]][:partitions]
       
-      # Extract GPU information from Gres field
-      gres = line[/Gres=(\S+)/, 1]
-      if gres && gres != "(null)"
-        # Format: gpu:type:count or gpu:type:count(S:socket)
-        if gres =~ /gpu:(\w+):(\d+)/
-          node[:gpu_type] = $1
-          node[:gpu_count] = $2.to_i
-          node[:has_gpu] = true
-        end
-      else
-        node[:has_gpu] = false
-        node[:gpu_type] = nil
-        node[:gpu_count] = 0
+      # Extract GPU information from the Gres field.
+      # Always initialise the GPU fields: a Gres value that is present but has no
+      # recognisable gpu entry (e.g. "shard:8") must still leave has_gpu == false
+      # rather than nil, or the frontend cannot tell GPU nodes from CPU nodes.
+      node[:has_gpu] = false
+      node[:gpu_type] = nil
+      node[:gpu_base_type] = nil
+      node[:gpu_count] = 0
+
+      gpu_spec = parse_gres_gpu(line[/Gres=(\S+)/, 1])
+      if gpu_spec && gpu_spec[1] > 0
+        # Keep the raw Gres name around: it is what users must pass to
+        # --gres=gpu:<name>:N. The display type may later be refined into a
+        # feature-based variant (e.g. "a100-80G") which is NOT a valid Gres name.
+        # Sites that configure GPUs without a model name use "gpu" itself.
+        node[:gpu_base_type] = gpu_spec[0] || 'gpu'
+        node[:gpu_type] = node[:gpu_base_type]
+        node[:gpu_count] = gpu_spec[1]
+        node[:has_gpu] = true
       end
 
-      # Extract GPU allocation from AllocTRES field
-      # Format: AllocTRES=cpu=8,mem=277G,gres/gpu=4
-      alloc_tres = line[/AllocTRES=(\S+)/, 1]
+      # Determine how many GPUs are in use.
+      #
+      # GresUsed is the authoritative per-node GRES usage field and is present in
+      # `scontrol show node` output, so it is consulted first. AllocTRES only
+      # carries gres/* entries on some Slurm versions and configurations; when it
+      # does not, relying on it leaves gpu_alloc at 0, which makes every GPU node
+      # look completely free and inflates every "available" figure on the
+      # dashboard. AllocTRES remains a fallback in both its plain (gres/gpu=4)
+      # and typed (gres/gpu:a100=4) spellings.
       node[:gpu_alloc] = 0
-      if alloc_tres && node[:has_gpu]
-        # Look for gres/gpu=N in the AllocTRES string
-        if alloc_tres =~ /gres\/gpu=(\d+)/
-          node[:gpu_alloc] = $1.to_i
-        end
+      if node[:has_gpu]
+        used_spec = parse_gres_gpu(line[/GresUsed=(\S+)/, 1])
+        alloc_tres = line[/AllocTRES=(\S+)/, 1]
+
+        node[:gpu_alloc] =
+          if used_spec
+            used_spec[1]
+          elsif alloc_tres =~ /gres\/gpu=(\d+)/
+            $1.to_i
+          elsif alloc_tres =~ /gres\/gpu:[^=,]+=(\d+)/
+            $1.to_i
+          else
+            0
+          end
+
+        # Never report more in use than exist, so gpu_free cannot go negative.
+        node[:gpu_alloc] = node[:gpu_count] if node[:gpu_alloc] > node[:gpu_count]
       end
       # Extract features
       features = line[/AvailableFeatures=(\S+)/, 1]
@@ -187,12 +241,53 @@ module SlurmParser
       # Only schedulable nodes should contribute free capacity.
       node[:cpus_free] = schedulable_node?(node) ? (node[:cpus_total] - node[:cpus_alloc]) : 0
       node[:memory_free] = schedulable_node?(node) ? (node[:memory_total] - node[:memory_alloc]) : 0
-      node[:gpu_free] = schedulable_node?(node) ? (node[:gpu_count] - node[:gpu_alloc]) : 0
+      node[:gpu_free] = schedulable_node?(node) ? [node[:gpu_count] - node[:gpu_alloc], 0].max : 0
       
       nodes << node
     end
     
     nodes
+  end
+
+  # Determine which partitions are limited to a group or account.
+  #
+  # Contributed ("lab") partitions are created with AllowGroups=<unix group> or
+  # AllowAccounts=<slurm account>, while open partitions leave both at ALL.
+  # Asking Slurm is authoritative — much better than guessing from partition
+  # names, which vary by site and silently break when a lab is renamed.
+  #
+  # owner_only describes the *partition*, never the nodes behind it: a contributed
+  # node is normally also in a cluster-wide preemptible partition, so anyone can
+  # still run on it that way.
+  #
+  # Note that PreemptMode is deliberately NOT read here. `scontrol show partition`
+  # reports the cluster-wide default for any partition that does not override it,
+  # so it marks unrelated partitions as preemptible. Which partitions are
+  # preemptible is site policy, held in PREEMPTIBLE_PARTITIONS in public/script.js.
+  #
+  # If the command is unavailable the hash is empty and no claims are made.
+  def self.parse_partition_access
+    output = run_command('scontrol show partition --oneliner')
+    access = {}
+
+    output.each_line do |line|
+      name = line[/PartitionName=(\S+)/, 1]
+      next unless name
+
+      groups = line[/AllowGroups=(\S+)/, 1]
+      accounts = line[/AllowAccounts=(\S+)/, 1]
+
+      open_to_all_groups = groups.nil? || groups.casecmp('all').zero?
+      open_to_all_accounts = accounts.nil? || accounts.casecmp('all').zero?
+
+      access[name] = {
+        allow_groups: open_to_all_groups ? nil : groups,
+        allow_accounts: open_to_all_accounts ? nil : accounts,
+        owner_only: !(open_to_all_groups && open_to_all_accounts)
+      }
+    end
+
+    access
   end
 
   # Parse sinfo output for partition information
@@ -299,11 +394,13 @@ module SlurmParser
   # Get partition summary
   def self.partition_summary(partitions, nodes)
     summary = {}
-    
+    access = parse_partition_access
+
     partitions.each do |partition|
       partition_nodes = nodes.select { |n| n[:partitions].include?(partition[:name]) }
       schedulable_nodes = partition_nodes.select { |n| schedulable_node?(n) }
-      
+      partition_access = access[partition[:name]] || {}
+
       summary[partition[:name]] = {
         total_nodes: partition_nodes.count,
         idle_nodes: partition_nodes.count { |n| n[:status] == 'idle' },
@@ -314,7 +411,13 @@ module SlurmParser
         available_cpus: schedulable_nodes.sum { |n| n[:cpus_free] },
         has_gpu: partition_nodes.any? { |n| n[:has_gpu] },
         time_limit: partition[:time_limit],
-        is_default: partition[:is_default]
+        is_default: partition[:is_default],
+        # owner_only means the partition is limited to a lab/group — not that its
+        # nodes are unreachable, since contributed nodes are usually also in a
+        # preemptible cluster-wide partition.
+        owner_only: partition_access[:owner_only] || false,
+        allow_groups: partition_access[:allow_groups],
+        allow_accounts: partition_access[:allow_accounts]
       }
     end
     

@@ -161,6 +161,122 @@ Shows fetched stats, partitions, GPU summary, and node details.
 
 GPU "in‑use" is estimated for mixed/allocated nodes using CPU usage ratio; for exact GPU accounting you can extend parsing to include per-job GRES usage.
 
+## Finding available resources (card drill-down)
+
+The cards under **GPU Overview** and **Partitions** are clickable. Selecting one
+filters **Node Details** to the matching nodes and opens a panel above the table
+with:
+
+- free capacity and node count for the selection — GPUs when a GPU type is
+  selected, otherwise CPUs
+- one chip per node, ordered by free capacity (largest block first) — click a chip
+  to jump to and highlight that node's row
+- which partitions those nodes belong to; for a partition selection, its time
+  limit and idle node count instead
+- a warning if any matching node is under an active reservation
+- one copy-ready `srun` command per resource the selection can actually give you
+
+**One card at a time.** Selecting a card replaces any previous selection, so there
+is only ever a single filter. The active one appears as a chip in the panel with an
+× to clear it; clicking the selected card again also deselects it.
+
+Clicking the **Available GPUs** stat card selects every GPU type at once. A
+partition selection additionally offers **Scope dashboard to this partition**,
+which promotes it to the global partition scope at the top of the page so the stat
+cards, GPU cards, and active-user list all follow.
+
+Use the checkbox (*Only nodes with free GPUs* for a GPU selection, *Only nodes with
+spare capacity* for a partition) to switch between "what can I run on right now"
+and "every matching node". Cards are keyboard operable: Tab to a card, then Enter
+or Space.
+
+The search box and the status dropdown combine with the selection, so you can
+narrow further — e.g. GPU type + `idle`.
+
+### Example `srun` commands
+
+Many partitions hold both CPU-only nodes and more than one GPU model, and no single
+`srun` line covers them — `--gres=gpu:a100:1` is invalid on a CPU node and on a
+V100 node. So the panel lists one command per case, each separately copyable and
+labelled with the free capacity behind it. For a partition with CPU nodes plus
+A100s and V100s:
+
+```
+[CPU only]  srun -p preempt -N 1 -c 4 --mem=8G --pty bash
+                                                        24 of 64 CPUs free on 1 node
+[A100-80G]  srun -p preempt -N 1 -c 4 --gres=gpu:a100:1 --constraint=a100-80G --pty bash
+                                                        11 of 16 GPUs free on 3 nodes
+[V100]      srun -p preempt -N 1 -c 4 --gres=gpu:v100:1 --pty bash
+                                                         3 of 4 GPUs free on 1 node
+```
+
+Clicking a specific GPU card collapses this to the commands for that model — one
+per partition that reaches those nodes.
+
+### Contributed (lab) nodes
+
+A lab-owned GPU node normally sits in **both** the lab's own partition and the
+shared `preempt` partition. Both are genuine routes to the same hardware, so both
+are listed — shared partitions first:
+
+```
+[preempt  ]  srun -p preempt -N 1 -c 4 --gres=gpu:l40s:1 --pty bash     7 of 8 free
+[smith-lab]  srun -p smith-lab -N 1 -c 4 --gres=gpu:l40s:1 --pty bash   7 of 8 free
+
+-p smith-lab is a lab-owned partition — only members of smith_lab can submit there.
+Everyone else reaches the same nodes with -p preempt, where a job runs until the
+owning lab needs the node and is then preempted.
+```
+
+So lab members use `-p smith-lab`; everyone else uses `-p preempt` to get onto the
+same hardware, accepting preemption. The dashboard only reports that there is no
+general-access route when the nodes really are absent from every shared partition —
+checked against the nodes' own partition lists, so pinning a lab partition still
+points non-members at the shared route.
+
+Ownership comes from Slurm's `AllowGroups`/`AllowAccounts`, not from partition
+naming, so it stays correct as labs are added or renamed. If
+`scontrol show partition` is unavailable, no partition is treated as lab-owned and
+no note is shown.
+
+Which partitions are preemptible is site policy, listed in
+`PREEMPTIBLE_PARTITIONS` at the top of `public/script.js` (just `preempt` today).
+This is deliberately not derived from Slurm's `PreemptMode`: `scontrol show
+partition` reports the cluster-wide default for any partition that does not set its
+own, which would mark unrelated partitions preemptible.
+
+The list reflects what the selection can be **asked for**, not only what is free at
+this instant, so a model whose GPUs are all busy still appears (with `0 of N free`)
+— the request is valid, it just queues. Nodes that are down or draining are never
+offered. Only the node list and counts respond to the availability toggle.
+
+Two details worth knowing:
+
+- When a GPU type is shown as a variant such as `A100-80G`, the suffix comes from a
+  Slurm node *feature*, not from the `Gres` name — hence
+  `--gres=gpu:a100:1 --constraint=a100-80G`.
+- Each GPU command picks its partition from that model's own nodes, so an H100
+  request is never paired with a partition that only has V100s. A partition-only
+  selection never infers a GPU request you did not ask for.
+- Sites that configure GRES without a model name (`Gres=gpu:4`) are shown as GPU
+  type `GPU` and requested as `--gres=gpu:1`, with no model segment.
+
+The commands are starting points: `-N 1` requests a single node, and `-c 4`,
+`--mem=8G`, and the GPU count of `1` are placeholders to adjust for your job.
+
+## Local UI development (no cluster required)
+
+`demo/build_preview.rb` renders the real template and assets against mock Slurm
+data, producing a standalone page you can open directly in a browser:
+
+```bash
+ruby demo/build_preview.rb
+open demo/preview.html
+```
+
+The preview stubs `fetch`, so it needs no server and no Slurm. Re-run the script
+after editing `views/index.erb`.
+
 ## Troubleshooting
 
 ### Dashboard shows "No data"
