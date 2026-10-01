@@ -637,6 +637,265 @@ input:checked + .slider:before {
     opacity: 0.7;
 }
 
+/* QOS Grid */
+.qos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+}
+
+.qos-card {
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px 12px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    overflow: hidden;
+}
+
+.qos-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+    border-color: var(--info);
+}
+
+.qos-card.default {
+    border-color: var(--info);
+    background: linear-gradient(135deg, rgba(155, 89, 182, 0.05) 0%, rgba(155, 89, 182, 0.02) 100%);
+}
+
+.qos-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.qos-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--dark);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.qos-badge {
+    background: var(--info);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.qos-limits {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.qos-limit-item {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.qos-limit-item i {
+    font-size: 10px;
+    color: var(--info);
+    opacity: 0.8;
+}
+
+.qos-limit-item strong {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.qos-no-limit {
+    font-style: italic;
+}
+
+.qos-card-action {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.2s ease;
+}
+
+.qos-card.clickable-card:hover .qos-card-action,
+.qos-card.selected .qos-card-action {
+    color: var(--info);
+}
+
+.qos-card.selected {
+    border-color: var(--info);
+    box-shadow: 0 0 0 2px rgba(155, 89, 182, 0.25), var(--shadow-hover);
+    transform: translateY(-3px);
+}
+
+/* Usage instructions panel shown under the QOS cards when one is selected */
+.qos-instructions-panel {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--info);
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(155, 89, 182, 0.06) 0%, #ffffff 60%);
+    padding: 16px 18px;
+    margin-top: 18px;
+}
+
+.qos-instructions-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.qos-instructions-title {
+    font-size: 14px;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.qos-instructions-title i {
+    color: var(--info);
+}
+
+.qos-instructions-title strong {
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.qos-instructions-summary {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+}
+
+.qos-instructions-summary code {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(44, 62, 80, 0.08);
+    color: var(--text-primary);
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.qos-instructions-partitions {
+    margin-bottom: 14px;
+    padding: 10px 13px;
+    background: rgba(155, 89, 182, 0.07);
+    border: 1px solid rgba(155, 89, 182, 0.22);
+    border-radius: 8px;
+}
+
+.qos-instructions-partitions .qos-instructions-summary {
+    margin-bottom: 6px;
+}
+
+.qos-instructions-partitions .qos-instructions-summary:last-child {
+    margin-bottom: 0;
+}
+
+.qos-instructions-partitions .qos-instructions-summary strong {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.qos-instructions-examples {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+}
+
+.qos-example-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.qos-example-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.qos-example-header .qos-example-label {
+    margin-bottom: 0;
+}
+
+.qos-example-header .btn-copy {
+    padding: 4px 10px;
+    min-height: auto;
+    font-size: 11px;
+}
+
+.qos-example-code {
+    background: var(--dark);
+    color: #e8f6ff;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 12px 14px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.qos-instructions-footer {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    font-size: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.qos-instructions-footer a {
+    color: var(--info);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.qos-instructions-footer a:hover {
+    text-decoration: underline;
+}
+
 /* Table Controls */
 .table-controls {
     display: flex;

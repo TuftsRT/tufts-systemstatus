@@ -144,6 +144,21 @@ module SlurmParser
     ""
   end
 
+  # Execute a command given as separate argv elements (no shell involved), so a
+  # value like a username can never be interpreted as shell syntax. Use this
+  # instead of run_command whenever a command embeds external input.
+  def self.run_command_argv(*args)
+    stdout, stderr, status = Open3.capture3(*args)
+    return stdout if status.success?
+
+    STDERR.puts "[SlurmParser] Command failed (exit #{status.exitstatus}): #{args.join(' ')}"
+    STDERR.puts "[SlurmParser] STDERR: #{stderr}" unless stderr.to_s.empty?
+    stdout
+  rescue => e
+    STDERR.puts "[SlurmParser] Exception executing command: #{args.inspect} — #{e.message}"
+    ""
+  end
+
   # Parse scontrol show node --oneliner output
   def self.parse_nodes
     visible_nodes = parse_visible_nodes
@@ -280,10 +295,17 @@ module SlurmParser
       open_to_all_groups = groups.nil? || groups.casecmp('all').zero?
       open_to_all_accounts = accounts.nil? || accounts.casecmp('all').zero?
 
+      # The QOS a job in this partition uses by default when it does not
+      # request one explicitly with --qos. (Which QOS a partition *accepts* is
+      # site policy enforced outside of Slurm's AllowQos/DenyQos ACL here, so
+      # it isn't derived from this output — see QOS_PARTITIONS in script.js.)
+      default_qos = line[/\bQoS=(\S+)/, 1]
+
       access[name] = {
         allow_groups: open_to_all_groups ? nil : groups,
         allow_accounts: open_to_all_accounts ? nil : accounts,
-        owner_only: !(open_to_all_groups && open_to_all_accounts)
+        owner_only: !(open_to_all_groups && open_to_all_accounts),
+        default_qos: (default_qos == '(null)' ? nil : default_qos)
       }
     end
 
@@ -417,7 +439,8 @@ module SlurmParser
         # preemptible cluster-wide partition.
         owner_only: partition_access[:owner_only] || false,
         allow_groups: partition_access[:allow_groups],
-        allow_accounts: partition_access[:allow_accounts]
+        allow_accounts: partition_access[:allow_accounts],
+        default_qos: partition_access[:default_qos]
       }
     end
     
@@ -450,6 +473,89 @@ module SlurmParser
     
     # Combine and return as a hash
     (public_partitions + lab_partitions).to_h
+  end
+
+  # Split a Slurm TRES string (e.g. "cpu=250,gres/gpu=12,mem=5000G") into a
+  # hash keyed by TRES name. Returns {} for blank/unset values.
+  def self.parse_tres_string(value)
+    return {} if value.nil? || value.to_s.empty?
+
+    value.split(',').each_with_object({}) do |pair, acc|
+      key, val = pair.split('=', 2)
+      acc[key] = val unless key.nil? || key.empty?
+    end
+  end
+
+  # Find which QOS names a user can use, grouped by the account (lab) that
+  # grants them, plus that user's default QOS per association.
+  #
+  # username is passed as its own argv element (run_command_argv does not use a
+  # shell), so it cannot be interpreted as command syntax.
+  def self.parse_user_qos(username)
+    output = run_command_argv('sacctmgr', '-n', '-P', 'show', 'assoc',
+                               "user=#{username}", 'format=Account,QOS,DefaultQOS')
+
+    qos_accounts = Hash.new { |h, k| h[k] = [] }
+    default_qos = nil
+
+    output.each_line do |line|
+      parts = line.strip.split('|', -1)
+      next if parts.length < 2
+
+      account = parts[0]
+      qos_list = parts[1].to_s.split(',').map(&:strip).reject(&:empty?)
+      default_qos ||= parts[2].to_s.strip unless parts[2].to_s.strip.empty?
+
+      qos_list.each do |qos|
+        qos_accounts[qos] << account unless qos_accounts[qos].include?(account)
+      end
+    end
+
+    { qos_accounts: qos_accounts, default_qos: default_qos }
+  end
+
+  # Look up MaxTRESPU/MaxJobsPU for the given QOS names only.
+  def self.parse_qos_limits(qos_names)
+    return {} if qos_names.empty?
+
+    output = run_command_argv('sacctmgr', '-n', '-P', 'show', 'qos', 'format=Name,MaxTRESPU,MaxJobsPU')
+    limits = {}
+
+    output.each_line do |line|
+      parts = line.strip.split('|', -1)
+      name = parts[0]
+      next unless name && qos_names.include?(name)
+
+      limits[name] = {
+        max_tres_pu: parse_tres_string(parts[1]),
+        max_jobs_pu: parts[2].to_s.strip.empty? ? nil : parts[2].to_i
+      }
+    end
+
+    limits
+  end
+
+  # Get the QOS available to a user, with resource-per-user limits, for display
+  # on the dashboard. Each QOS appears once even if granted by multiple accounts.
+  def self.user_qos_summary(username)
+    return [] if username.to_s.empty?
+
+    assoc = parse_user_qos(username)
+    limits = parse_qos_limits(assoc[:qos_accounts].keys)
+
+    assoc[:qos_accounts].keys.sort.map do |name|
+      qos_limits = limits[name] || {}
+      {
+        name: name,
+        is_default: name == assoc[:default_qos],
+        # Slurm accounts this QOS is granted through. Not shown directly, but
+        # needed to scope which lab partitions a user can reach with
+        # normal-contrib — lab partitions are named after their account.
+        accounts: assoc[:qos_accounts][name].sort,
+        max_tres_pu: qos_limits[:max_tres_pu] || {},
+        max_jobs_pu: qos_limits[:max_jobs_pu]
+      }
+    end
   end
 
   # Parse scontrol show reservations output

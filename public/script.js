@@ -45,6 +45,51 @@ const CPU_TYPE_DISPLAY = {
     aarch64: 'ARM64',
 };
 
+// Human-readable labels for TRES names as they appear in MaxTRESPU (e.g.
+// "cpu=250,gres/gpu=12,mem=5000G"). A typed GPU entry (gres/gpu:a100=4) falls
+// back to "GPUs (a100)" rather than needing an entry per model.
+const TRES_DISPLAY = {
+    cpu: 'CPUs',
+    mem: 'Memory',
+    node: 'Nodes',
+    'gres/gpu': 'GPUs',
+    billing: 'Billing',
+};
+
+function formatTresLabel(key) {
+    if (TRES_DISPLAY[key]) return TRES_DISPLAY[key];
+    const typedGpu = key.match(/^gres\/gpu:(.+)$/);
+    if (typedGpu) return `GPUs (${typedGpu[1]})`;
+    return key;
+}
+
+// Which partitions accept each QOS. This is Tufts HPC policy, not something
+// reliably derivable from Slurm's partition AllowQos/DenyQos ACL (which is
+// left wide open on most partitions here) — captured explicitly instead, the
+// same way PREEMPTIBLE_PARTITIONS below is.
+const QOS_PARTITIONS = {
+    normal: ['batch', 'gpu'],
+    interactive: ['batch', 'gpu'],
+    preempt: ['preempt'],
+    'normal-7days': ['batch'],
+    expanded: ['batch', 'gpu'],
+    exception: ['batch', 'gpu'],
+};
+
+// Sentinel QOS name that is scoped to every lab/contributed partition rather
+// than a fixed list of partition names.
+const LAB_PARTITIONS_QOS = 'normal-contrib';
+
+// Whether a QOS's own per-user GPU limit (if any) rules out GPU jobs, so the
+// instructions panel can skip the GPU example for a CPU-only QOS like
+// normal-7days (MaxTRESPU includes gres/gpu=0).
+function qosAllowsGpu(qos) {
+    const tres = qos.max_tres_pu || {};
+    const gpuEntries = Object.entries(tres).filter(([key]) => key === 'gres/gpu' || key.startsWith('gres/gpu:'));
+    if (gpuEntries.length === 0) return true;
+    return gpuEntries.some(([, value]) => Number(value) > 0);
+}
+
 // Sentinel used by the GPU drill-down to mean "any GPU type".
 const ALL_GPU_TYPES = '__all_gpu_types__';
 
@@ -67,6 +112,23 @@ const MAX_PARTITION_HINTS = 4;
 // its own, which made every partition look preemptible. Add names here if the
 // site gains another preemptible partition.
 const PREEMPTIBLE_PARTITIONS = ['preempt'];
+
+// Partitions whose default QOS is implicit enough not to need an explicit
+// --qos flag in an example command. Every other partition is a lab/contributed
+// one, which requires --qos=normal-contrib to run there.
+const QOS_IMPLICIT_PARTITIONS = ['batch', 'gpu', 'blackwell'];
+const LAB_PARTITION_QOS = 'normal-contrib';
+// Partitions that need their own explicit --qos rather than the lab default.
+const PARTITION_QOS_OVERRIDES = { preempt: 'preempt' };
+
+// " --qos=<name>" for a partition that needs one spelled out, "" otherwise —
+// ready to splice straight into a generated srun/sbatch command.
+function qosFlagFor(partitionName) {
+    if (!partitionName) return '';
+    if (PARTITION_QOS_OVERRIDES[partitionName]) return ` --qos=${PARTITION_QOS_OVERRIDES[partitionName]}`;
+    if (QOS_IMPLICIT_PARTITIONS.includes(partitionName)) return '';
+    return ` --qos=${LAB_PARTITION_QOS}`;
+}
 
 function plural(count, noun) {
     return `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -112,6 +174,10 @@ class ClusterDashboard {
         this.gpuTypeFilter = null;
         this.partitionFilter = null;
         this.gpuAvailableOnly = true;
+        // Independent of the GPU/partition drill-down: which QOS card (if any)
+        // has its usage instructions expanded below the QOS section.
+        this.qosFilter = null;
+        this.lastUserQos = [];
         this.allNodes = [];
         this.allJobs = [];
         this.allPartitions = {};
@@ -161,6 +227,22 @@ class ClusterDashboard {
 
         this.bindCardActivation('partition-cards', '.partition-card[data-partition]',
             (card) => this.togglePartitionFilter(card.dataset.partition));
+
+        this.bindCardActivation('qos-cards', '.qos-card[data-qos-name]',
+            (card) => this.toggleQosFilter(card.dataset.qosName));
+
+        const qosInstructionsPanel = document.getElementById('qos-instructions-panel');
+        qosInstructionsPanel.addEventListener('click', (event) => {
+            if (event.target.closest('[data-action="close-qos-instructions"]')) {
+                this.clearQosFilter();
+                return;
+            }
+
+            const copyBtn = event.target.closest('[data-action="copy-hint"]');
+            if (copyBtn) {
+                this.copyToClipboard(copyBtn.dataset.copy, copyBtn);
+            }
+        });
 
         const gpuStatCard = document.getElementById('stat-gpus-card');
         gpuStatCard.addEventListener('click', () => this.toggleGpuTypeFilter(ALL_GPU_TYPES));
@@ -409,6 +491,7 @@ class ClusterDashboard {
         this.allPartitions = data.partitions || {};
         this.permissions = data.permissions || { can_view_restricted_top_users: false };
 
+        this.updateQosCards(data.user_qos || []);
         this.updatePartitionScopeOptions();
         this.applyPartitionScope(data);
     }
@@ -665,6 +748,222 @@ class ClusterDashboard {
             // down to the node table.
             if (restored) restored.focus({ preventScroll: true });
         }
+    }
+
+    updateQosCards(qosList) {
+        this.debug('User QOS', qosList);
+        this.lastUserQos = qosList || [];
+        this.renderQosCards(this.lastUserQos);
+    }
+
+    toggleQosFilter(name) {
+        this.qosFilter = this.qosFilter === name ? null : name;
+        this.renderQosCards(this.lastUserQos);
+    }
+
+    clearQosFilter() {
+        this.qosFilter = null;
+        this.renderQosCards(this.lastUserQos);
+    }
+
+    renderQosCards(qosList) {
+        const section = document.getElementById('qos-section');
+        const container = document.getElementById('qos-cards');
+
+        if (!qosList || qosList.length === 0) {
+            section.classList.add('hidden');
+            container.innerHTML = '';
+            this.qosFilter = null;
+            this.renderQosInstructions();
+            return;
+        }
+
+        section.classList.remove('hidden');
+
+        // Drop a selection that no longer exists in the current list (defensive;
+        // today the list is always the user's full QOS set).
+        if (this.qosFilter && !qosList.some((qos) => qos.name === this.qosFilter)) {
+            this.qosFilter = null;
+        }
+
+        container.innerHTML = qosList.map((qos) => {
+            const safeName = escapeHtml(qos.name);
+            const selected = this.qosFilter === qos.name;
+
+            const limitItems = Object.entries(qos.max_tres_pu || {}).map(([key, value]) => `
+                <span class="qos-limit-item"><i class="fas fa-angle-right"></i> <strong>${escapeHtml(value)}</strong> ${escapeHtml(formatTresLabel(key))}</span>
+            `).join('');
+
+            const jobsItem = qos.max_jobs_pu != null
+                ? `<span class="qos-limit-item"><i class="fas fa-angle-right"></i> <strong>${qos.max_jobs_pu}</strong> Max Jobs</span>`
+                : '';
+
+            const limitsHtml = (limitItems + jobsItem) || '<span class="qos-limit-item qos-no-limit">No per-user limit set</span>';
+
+            const actionText = selected
+                ? '<i class="fas fa-circle-xmark"></i> Hide usage example'
+                : '<i class="fas fa-circle-info"></i> Click for usage example';
+
+            return `
+                <div class="qos-card clickable-card${qos.is_default ? ' default' : ''}${selected ? ' selected' : ''}"
+                     data-qos-name="${safeName}"
+                     role="button" tabindex="0" aria-pressed="${selected}"
+                     title="${safeName} QOS — click to ${selected ? 'hide' : 'show'} usage instructions">
+                    <div class="qos-header">
+                        <div class="qos-name">${safeName}</div>
+                        ${qos.is_default ? '<span class="qos-badge">Default</span>' : ''}
+                    </div>
+                    <div class="qos-limits">${limitsHtml}</div>
+                    <div class="qos-card-action">${actionText}</div>
+                </div>
+            `;
+        }).join('');
+
+        this.renderQosInstructions();
+    }
+
+    // Usage instructions for the selected QOS card, shown directly under the
+    // QOS section. Content follows the Tufts HPC QOS guide:
+    // https://rtguides.it.tufts.edu/hpc/compute/partition.html#quality-of-service-qos
+    renderQosInstructions() {
+        const panel = document.getElementById('qos-instructions-panel');
+
+        if (!this.qosFilter) {
+            panel.classList.add('hidden');
+            panel.innerHTML = '';
+            return;
+        }
+
+        const qos = (this.lastUserQos || []).find((q) => q.name === this.qosFilter);
+        if (!qos) {
+            panel.classList.add('hidden');
+            panel.innerHTML = '';
+            return;
+        }
+
+        const safeName = escapeHtml(qos.name);
+
+        const limitParts = Object.entries(qos.max_tres_pu || {})
+            .map(([key, value]) => `${value} ${formatTresLabel(key)}`);
+        if (qos.max_jobs_pu != null) limitParts.push(`${qos.max_jobs_pu} jobs`);
+        const limitSummary = limitParts.length
+            ? `up to ${limitParts.join(', ')} running at once (per user)`
+            : 'no additional per-user limit';
+
+        // Lab partitions are named after the Slurm account that owns them, so
+        // the accounts this QOS was granted through (qos.accounts) double as
+        // the set of lab partitions this user can actually reach with it.
+        const qosPartitionNames = qos.name === LAB_PARTITIONS_QOS
+            ? (qos.accounts || []).filter((account) => (this.allPartitions[account] || {}).owner_only)
+            : (QOS_PARTITIONS[qos.name] || null);
+
+        let partitionsHtml = '';
+        if (qosPartitionNames) {
+            const availabilityText = qos.name === LAB_PARTITIONS_QOS
+                ? (qosPartitionNames.length
+                    ? `Usable only in the lab/contributed partition${qosPartitionNames.length > 1 ? 's' : ''} you belong to: <strong>${qosPartitionNames.map(escapeHtml).join(', ')}</strong>.`
+                    : 'Usable only in lab/contributed partitions — you are not currently a member of one.')
+                : `Usable only in: <strong>${qosPartitionNames.map(escapeHtml).join(', ')}</strong>.`;
+
+            partitionsHtml = `
+                <div class="qos-instructions-partitions">
+                    <div class="qos-example-label">Partition availability</div>
+                    <p class="qos-instructions-summary">${availabilityText}</p>
+                </div>
+            `;
+        }
+
+        // A job can only run in one partition at a time, so each example below
+        // names exactly one — never a comma list. The CPU example uses the
+        // first partition this QOS can use; the GPU example uses the first of
+        // those that actually has GPU nodes (has_gpu), which may be a
+        // different partition (e.g. normal's "batch" has none, "gpu" does).
+        const candidatePartitions = (qosPartitionNames && qosPartitionNames.length) ? qosPartitionNames : ['batch'];
+        const cpuPartition = candidatePartitions[0];
+        const gpuPartition = candidatePartitions.find((name) => (this.allPartitions[name] || {}).has_gpu);
+        const showGpuExamples = qosAllowsGpu(qos) && !!gpuPartition;
+
+        // Renders one example block with a copy button that copies exactly what
+        // is shown, matching the copy affordance already used in the Partitions
+        // drilldown hints below the node table.
+        const renderQosExample = (label, rawText) => `
+                <div class="qos-example">
+                    <div class="qos-example-header">
+                        <div class="qos-example-label">${label}</div>
+                        <button type="button" class="btn btn-ghost btn-copy" data-action="copy-hint"
+                                data-copy="${escapeHtml(rawText)}" aria-label="Copy ${label} example">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                    <pre class="qos-example-code">${escapeHtml(rawText)}</pre>
+                </div>`;
+
+        const batchCpuText = `#!/bin/bash -l
+#SBATCH -J My_Job_Name
+#SBATCH --time=00-01:20:00
+#SBATCH -p ${cpuPartition}
+#SBATCH --qos=${qos.name}
+#SBATCH -N 1
+#SBATCH -n 2
+#SBATCH --mem=2g
+#SBATCH --output=MyJob.%j.%N.out
+#SBATCH --error=MyJob.%j.%N.err
+
+$ sbatch mycpujob.sh`;
+
+        const batchGpuText = `#!/bin/bash -l
+#SBATCH -J My_Job_Name
+#SBATCH --time=00-00:20:00
+#SBATCH -p ${gpuPartition}
+#SBATCH --qos=${qos.name}
+#SBATCH -N 1
+#SBATCH -n 2
+#SBATCH --mem=2g
+#SBATCH --gres=gpu:1
+#SBATCH --output=MyJob.%j.%N.out
+#SBATCH --error=MyJob.%j.%N.err
+
+$ sbatch mygpujob.sh`;
+
+        const interactiveCpuText = `srun -p ${cpuPartition} --qos=${qos.name} -t 1-2:30:00 -n 2 \\
+    --mem=2g --x11=first --pty bash`;
+
+        const interactiveGpuText = `srun -p ${gpuPartition} --qos=${qos.name} -t 1-2:30:00 -n 2 \\
+    --mem=4g --gres=gpu:1 --pty bash`;
+
+        const batchGpuExample = showGpuExamples ? renderQosExample('Batch job — GPU', batchGpuText) : '';
+        const interactiveGpuExample = showGpuExamples ? renderQosExample('Interactive job — GPU', interactiveGpuText) : '';
+
+        panel.innerHTML = `
+            <div class="qos-instructions-head">
+                <div class="qos-instructions-title">
+                    <i class="fas fa-circle-info"></i> Using the <strong>${safeName}</strong> QOS
+                </div>
+                <button type="button" class="btn-ghost" data-action="close-qos-instructions">
+                    <i class="fas fa-xmark"></i> Close
+                </button>
+            </div>
+            <p class="qos-instructions-summary">
+                Requesting <code>--qos=${safeName}</code> grants ${limitSummary}.
+            </p>
+            ${partitionsHtml}
+            <div class="qos-instructions-examples">
+                ${renderQosExample('Batch job — CPU', batchCpuText)}${batchGpuExample}
+                ${renderQosExample('Interactive job — CPU', interactiveCpuText)}${interactiveGpuExample}
+            </div>
+            <div class="qos-instructions-footer">
+                <a href="https://rtguides.it.tufts.edu/hpc/compute/partition.html#quality-of-service-qos" target="_blank" rel="noopener noreferrer">
+                    <i class="fas fa-book"></i> Partitions &amp; QOS
+                </a>
+                <a href="https://rtguides.it.tufts.edu/hpc/slurm/batchjob.html" target="_blank" rel="noopener noreferrer">
+                    <i class="fas fa-file-code"></i> Batch jobs
+                </a>
+                <a href="https://rtguides.it.tufts.edu/hpc/slurm/interactive.html" target="_blank" rel="noopener noreferrer">
+                    <i class="fas fa-terminal"></i> Interactive jobs
+                </a>
+            </div>
+        `;
+        panel.classList.remove('hidden');
     }
 
     updatePartitions(partitions) {
@@ -976,7 +1275,7 @@ class ClusterDashboard {
                 hints.push({
                     tag: 'CPU only',
                     detail: `${freeCpus} of ${totalCpus} CPUs free on ${cpuNodes.length} node${cpuNodes.length === 1 ? '' : 's'}`,
-                    cmd: `srun -p ${partition} -N 1 -c 4 --mem=8G --pty bash`
+                    cmd: `srun -p ${partition} -N 1 -c 4 --mem=8G${qosFlagFor(partition)} --pty bash`
                 });
             }
         }
@@ -1089,6 +1388,7 @@ class ClusterDashboard {
 
         let cmd = `srun -p ${partition} -N 1 -c 4 --gres=${gresSpec}`;
         if (needsConstraint) cmd += ` --constraint=${refinedType}`;
+        cmd += qosFlagFor(partition);
         cmd += ' --pty bash';
 
         const info = this.partitionInfoFor(partition);
