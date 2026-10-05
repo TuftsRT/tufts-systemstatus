@@ -49,6 +49,8 @@ get '/api/data' do
       can_view_restricted_top_users: can_view_restricted_top_users
     }
 
+    data[:user_qos] = SlurmParser.user_qos_summary(current_username)
+
     { success: true, data: data }.to_json
   rescue => e
     status 500
