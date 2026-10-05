@@ -798,7 +798,11 @@ class ClusterDashboard {
                 ? `<span class="qos-limit-item"><i class="fas fa-angle-right"></i> <strong>${qos.max_jobs_pu}</strong> Max Jobs</span>`
                 : '';
 
-            const limitsHtml = (limitItems + jobsItem) || '<span class="qos-limit-item qos-no-limit">No per-user limit set</span>';
+            const wallItem = qos.max_wall
+                ? `<span class="qos-limit-item"><i class="far fa-clock"></i> <strong>${escapeHtml(qos.max_wall)}</strong> Time Limit</span>`
+                : '';
+
+            const limitsHtml = (limitItems + jobsItem + wallItem) || '<span class="qos-limit-item qos-no-limit">No per-user limit set</span>';
 
             const actionText = selected
                 ? '<i class="fas fa-circle-xmark"></i> Hide usage example'
@@ -849,6 +853,7 @@ class ClusterDashboard {
         const limitSummary = limitParts.length
             ? `up to ${limitParts.join(', ')} running at once (per user)`
             : 'no additional per-user limit';
+        const wallSummary = qos.max_wall ? ` Jobs are capped at a <strong>${escapeHtml(qos.max_wall)}</strong> time limit.` : '';
 
         // Lab partitions are named after the Slurm account that owns them, so
         // the accounts this QOS was granted through (qos.accounts) double as
@@ -907,9 +912,7 @@ class ClusterDashboard {
 #SBATCH -n 2
 #SBATCH --mem=2g
 #SBATCH --output=MyJob.%j.%N.out
-#SBATCH --error=MyJob.%j.%N.err
-
-$ sbatch mycpujob.sh`;
+#SBATCH --error=MyJob.%j.%N.err`;
 
         const batchGpuText = `#!/bin/bash -l
 #SBATCH -J My_Job_Name
@@ -921,9 +924,7 @@ $ sbatch mycpujob.sh`;
 #SBATCH --mem=2g
 #SBATCH --gres=gpu:1
 #SBATCH --output=MyJob.%j.%N.out
-#SBATCH --error=MyJob.%j.%N.err
-
-$ sbatch mygpujob.sh`;
+#SBATCH --error=MyJob.%j.%N.err`;
 
         const interactiveCpuText = `srun -p ${cpuPartition} --qos=${qos.name} -t 1-2:30:00 -n 2 \\
     --mem=2g --x11=first --pty bash`;
@@ -944,7 +945,7 @@ $ sbatch mygpujob.sh`;
                 </button>
             </div>
             <p class="qos-instructions-summary">
-                Requesting <code>--qos=${safeName}</code> grants ${limitSummary}.
+                Requesting <code>--qos=${safeName}</code> grants ${limitSummary}.${wallSummary}
             </p>
             ${partitionsHtml}
             <div class="qos-instructions-examples">

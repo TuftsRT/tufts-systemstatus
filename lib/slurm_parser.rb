@@ -514,11 +514,11 @@ module SlurmParser
     { qos_accounts: qos_accounts, default_qos: default_qos }
   end
 
-  # Look up MaxTRESPU/MaxJobsPU for the given QOS names only.
+  # Look up MaxTRESPU/MaxJobsPU/MaxWall for the given QOS names only.
   def self.parse_qos_limits(qos_names)
     return {} if qos_names.empty?
 
-    output = run_command_argv('sacctmgr', '-n', '-P', 'show', 'qos', 'format=Name,MaxTRESPU,MaxJobsPU')
+    output = run_command_argv('sacctmgr', '-n', '-P', 'show', 'qos', 'format=Name,MaxTRESPU,MaxJobsPU,MaxWall')
     limits = {}
 
     output.each_line do |line|
@@ -526,9 +526,11 @@ module SlurmParser
       name = parts[0]
       next unless name && qos_names.include?(name)
 
+      max_wall = parts[3].to_s.strip
       limits[name] = {
         max_tres_pu: parse_tres_string(parts[1]),
-        max_jobs_pu: parts[2].to_s.strip.empty? ? nil : parts[2].to_i
+        max_jobs_pu: parts[2].to_s.strip.empty? ? nil : parts[2].to_i,
+        max_wall: max_wall.empty? ? nil : max_wall
       }
     end
 
@@ -553,7 +555,8 @@ module SlurmParser
         # normal-contrib — lab partitions are named after their account.
         accounts: assoc[:qos_accounts][name].sort,
         max_tres_pu: qos_limits[:max_tres_pu] || {},
-        max_jobs_pu: qos_limits[:max_jobs_pu]
+        max_jobs_pu: qos_limits[:max_jobs_pu],
+        max_wall: qos_limits[:max_wall]
       }
     end
   end
