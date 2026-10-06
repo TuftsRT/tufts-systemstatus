@@ -802,7 +802,14 @@ class ClusterDashboard {
                 ? `<span class="qos-limit-item"><i class="far fa-clock"></i> <strong>${escapeHtml(qos.max_wall)}</strong> Time Limit</span>`
                 : '';
 
-            const limitsHtml = (limitItems + jobsItem + wallItem) || '<span class="qos-limit-item qos-no-limit">No per-user limit set</span>';
+            // Resource limits (TRES/jobs) and the time limit are independent, so a
+            // QOS like normal-contrib can have a time limit but no resource cap —
+            // call that out explicitly rather than letting the time limit badge
+            // stand in for "no limits at all".
+            const resourceItems = limitItems + jobsItem;
+            const limitsHtml = resourceItems
+                ? resourceItems + wallItem
+                : '<span class="qos-limit-item qos-no-limit">No per-user resource limit</span>' + wallItem;
 
             const actionText = selected
                 ? '<i class="fas fa-circle-xmark"></i> Hide usage example'
