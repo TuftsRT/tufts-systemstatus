@@ -13,9 +13,12 @@ enable :static
 # Sinatra >= 4.1 enables Rack::Protection::HostAuthorization in development
 # (which is how OnDemand runs sandbox/dev apps) and only permits localhost,
 # so requests via the OnDemand hostname get "Host not permitted".
-set :host_authorization, {
-  permitted_hosts: ['localhost', '.localhost', '.tufts.edu']
-}
+#
+# The check guards against DNS rebinding on dev servers bound to localhost.
+# Under OnDemand the app is only reachable through the authenticated Apache
+# proxy -> per-user nginx -> Passenger Unix socket, so it adds no protection.
+# An empty list disables it, keeping the app portable across HPC centers.
+set :host_authorization, { permitted_hosts: [] }
 
 helpers do
   def current_username
